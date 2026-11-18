@@ -1,0 +1,16 @@
+Name:Pelakka Predation
+ManaCost:2 B
+Types:Sorcery
+A:SP$ Discard | ValidTgts$ Opponent | Mode$ RevealYouChoose | DiscardValid$ Card.cmcGE3 | DiscardValidDesc$ card with mana value 3 or greater | SpellDescription$ Target opponent reveals their hand. You choose a card from it with mana value 3 or greater. That player discards that card.
+AlternateMode:Modal
+Oracle:Target opponent reveals their hand. You choose a card from it with mana value 3 or greater. That player discards that card.
+
+ALTERNATE
+
+Name:Pelakka Caverns
+ManaCost:no cost
+Types:Land
+R:Event$ Moved | ValidCard$ Card.Self | Destination$ Battlefield | ReplacementResult$ Updated | ReplaceWith$ ETBTapped | Description$ CARDNAME enters tapped.
+SVar:ETBTapped:DB$ Tap | Defined$ Self | ETB$ True
+A:AB$ Mana | Cost$ T | Produced$ B | SpellDescription$ Add {B}.
+Oracle:Pelakka Caverns enters tapped.\n{T}: Add {B}.

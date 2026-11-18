@@ -1,0 +1,10 @@
+Name:Noxious Vapors
+ManaCost:1 B B
+Types:Sorcery
+A:SP$ RepeatEach | RepeatPlayers$ Player | RepeatSubAbility$ DBReveal | StackDescription$ SpellDescription | SpellDescription$ Each player reveals their hand, chooses one card of each color from it, then discards all other nonland cards.
+SVar:DBReveal:DB$ RevealHand | Defined$ Player.IsRemembered | SubAbility$ DBChoose
+SVar:DBChoose:DB$ ChooseCard | Mandatory$ True | Defined$ Player.IsRemembered | ChooseEach$ Card.White & Card.Green & Card.Red & Card.Black & Card.Blue | ChoiceZone$ Hand | LockInText$ True | SubAbility$ DBDiscard
+SVar:DBDiscard:DB$ Discard | Mode$ Defined | Defined$ Player.IsRemembered | DefinedCards$ ValidHand Card.!ChosenCard+nonLand+RememberedPlayerCtrl
+AI:RemoveDeck:All
+AI:RemoveDeck:Random
+Oracle:Each player reveals their hand, chooses one card of each color from it, then discards all other nonland cards.

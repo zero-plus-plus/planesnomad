@@ -1,0 +1,8 @@
+Name:Clarion Ultimatum
+ManaCost:G G W W W U U
+Types:Sorcery
+A:SP$ ChooseCard | Defined$ You | Amount$ 5 | Mandatory$ True | Choices$ Permanent.YouCtrl | ChoiceTitle$ Choose five permanents you control | ChoiceZone$ Battlefield | SubAbility$ DBChangeZone | StackDescription$ SpellDescription | SpellDescription$ Choose five permanents you control. For each of those permanents, you may search your library for a card with the same name as that permanent. Put those cards onto the battlefield tapped, then shuffle.
+SVar:DBChangeZone:DB$ ChangeZone | Origin$ Library | Destination$ Battlefield | Tapped$ True | ChangeType$ Card | SameNameAsEach$ ChosenCard | StackDescription$ None
+SVar:NeedsToPlayVar:Z GE4
+SVar:Z:Count$Valid Permanent.YouCtrl
+Oracle:Choose five permanents you control. For each of those permanents, you may search your library for a card with the same name as that permanent. Put those cards onto the battlefield tapped, then shuffle.

@@ -1,0 +1,7 @@
+$classpath = Get-Content ".\classpath.txt" -Raw
+java -cp "target\classes;$classpath" com.planesnomad.CardDatabaseTest
+
+$classpath = Get-Content ".\classpath.txt" -Raw
+java -cp "target\classes;$classpath" com.planesnomad.PlanesnomadGame
+
+cd C:\Dev\PlanesNomad
