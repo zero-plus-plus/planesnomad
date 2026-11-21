@@ -1,0 +1,153 @@
+package com.planesnomad.gui;
+
+import com.planesnomad.ForgeEngine;
+import com.planesnomad.RelicTest;
+import com.planesnomad.gui.engine.MatchRunner;
+import com.planesnomad.gui.model.CardSnapshot;
+import com.planesnomad.gui.model.MatchSnapshot;
+import com.planesnomad.gui.model.RelicSnapshot;
+import com.planesnomad.gui.model.RelicSnapshot.State;
+import forge.card.CardDb;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * Checks what the match screen is given to draw, without drawing it: runs a full viewer
+ * match (no delays) and inspects every snapshot. Needs no display.
+ *
+ * Run from the repository root. Exits with status 1 if any check fails.
+ */
+public final class GuiSnapshotTest {
+
+    private static int failures = 0;
+
+    public static void main(String[] args) throws Exception {
+        CardDb db = ForgeEngine.initialize();
+
+        List<MatchSnapshot> snaps = Collections.synchronizedList(new ArrayList<>());
+        MatchRunner runner = new MatchRunner(TestMatches.redVsBlueWithRelics(db),
+            TestMatches.YOU, TestMatches.ENEMY, "you", "enemy", snaps::add);
+        runner.setNoDelay(true);
+        runner.start();
+        runner.join();
+
+        System.out.println("Snapshots taken: " + snaps.size());
+        MatchSnapshot first = snaps.get(0);
+        MatchSnapshot last = snaps.get(snaps.size() - 1);
+
+        check("Many snapshots were published (" + snaps.size() + ")", snaps.size() > 50);
+        check("Final snapshot has a result: " + last.result(), last.finished());
+        check("Bottom player is " + TestMatches.YOU, first.you().name().equals(TestMatches.YOU));
+        check("Top player is " + TestMatches.ENEMY, first.enemy().name().equals(TestMatches.ENEMY));
+
+        boolean enemyHandAlwaysHidden = snaps.stream()
+            .allMatch(s -> s.enemy().hand().stream().allMatch(CardSnapshot::isHidden));
+        boolean yourHandAlwaysVisible = snaps.stream()
+            .allMatch(s -> s.you().hand().stream().noneMatch(CardSnapshot::isHidden));
+        boolean enemyHandEverNonEmpty = snaps.stream().anyMatch(s -> !s.enemy().hand().isEmpty());
+        check("Enemy hand is always hidden (count only)", enemyHandAlwaysHidden && enemyHandEverNonEmpty);
+        check("Your hand is always visible", yourHandAlwaysVisible);
+
+        check("Relics are shown as relics, not as cards on the battlefield",
+            snaps.stream().allMatch(s -> s.you().battlefield().stream()
+                .noneMatch(c -> c.name().equals(RelicTest.PASSIVE) || c.name().equals(RelicTest.ACTIVATED))));
+        // The very first snapshot is taken before the engine sets up the command zone.
+        MatchSnapshot turnOne = snaps.stream().filter(s -> s.turn() >= 1).findFirst().orElse(first);
+        check("All four relics/consumables are in the bar once turn 1 starts",
+            names(turnOne.you().relics()).containsAll(List.of(
+                RelicTest.PASSIVE, RelicTest.TRIGGERED, RelicTest.ACTIVATED, RelicTest.CONSUMABLE)));
+        check("Enemy has no relics", snaps.stream().allMatch(s -> s.enemy().relics().isEmpty()));
+
+        check("Passive relic is never READY or USED (no glow, no grey)",
+            snaps.stream().allMatch(s -> state(s, RelicTest.PASSIVE) == null || state(s, RelicTest.PASSIVE) == State.IDLE));
+        boolean lensReady = snaps.stream().anyMatch(s -> state(s, RelicTest.ACTIVATED) == State.READY);
+        boolean lensUsed = snaps.stream().anyMatch(s -> state(s, RelicTest.ACTIVATED) == State.USED);
+        boolean lensIdle = snaps.stream().anyMatch(s -> state(s, RelicTest.ACTIVATED) == State.IDLE);
+        System.out.println("  Tinker's Lens states seen: ready=" + lensReady + " used=" + lensUsed + " idle=" + lensIdle);
+        check("Activated relic is READY (glow) at some point", lensReady);
+        check("Activated relic is IDLE when it can't be paid for (e.g. early turns)", lensIdle);
+        if (countLensUses(last) > 0) {
+            check("Activated relic shows USED (greyed out) after use", lensUsed);
+            check("USED is followed by READY again on a later turn", usedThenReadyLater(snaps));
+        }
+
+        boolean flaskEverReady = snaps.stream().anyMatch(s -> state(s, RelicTest.CONSUMABLE) == State.READY);
+        boolean flaskUsed = last.log().stream().anyMatch(l -> l.text().startsWith(TestMatches.YOU + " activated " + RelicTest.CONSUMABLE));
+        check("Consumable is READY (glow) while available", flaskEverReady);
+        if (flaskUsed) {
+            check("Consumable disappears from the bar after use",
+                !names(last.you().relics()).contains(RelicTest.CONSUMABLE));
+        }
+
+        boolean stackSeen = snaps.stream().anyMatch(s -> !s.stack().isEmpty());
+        check("Stack contents are shown in plain language", stackSeen && snaps.stream()
+            .flatMap(s -> s.stack().stream())
+            .allMatch(i -> i.text().matches(".+ (casts|activates|triggers) .+")));
+        check("Stack shows both players' items", snaps.stream().flatMap(s -> s.stack().stream()).anyMatch(i -> i.byYou())
+            && snaps.stream().flatMap(s -> s.stack().stream()).anyMatch(i -> !i.byYou()));
+
+        check("Attacking creatures are marked during combat",
+            snaps.stream().anyMatch(s -> s.you().battlefield().stream().anyMatch(CardSnapshot::attacking)
+                || s.enemy().battlefield().stream().anyMatch(CardSnapshot::attacking)));
+        check("Tapped lands are marked", snaps.stream().anyMatch(s -> s.you().battlefield().stream()
+            .anyMatch(c -> c.land() && c.tapped())));
+        check("Game log grows and starts with turn 1", last.log().size() > 20 && last.log().get(0).turnHeader());
+        check("Cards carry set code and collector number (for image downloads)",
+            snaps.stream().flatMap(s -> s.you().battlefield().stream())
+                .filter(c -> !c.token()).allMatch(c -> !c.setCode().isEmpty() && !c.collectorNumber().isEmpty()));
+
+        // Debug option: reveal the enemy hand.
+        List<MatchSnapshot> revealed = Collections.synchronizedList(new ArrayList<>());
+        MatchRunner r2 = new MatchRunner(TestMatches.redVsBlueWithRelics(db),
+            TestMatches.YOU, TestMatches.ENEMY, "you", "enemy", revealed::add);
+        r2.setNoDelay(true);
+        r2.setRevealEnemyHand(true);
+        r2.start();
+        r2.join();
+        check("'Show enemy hand' reveals the enemy's cards", revealed.stream()
+            .anyMatch(s -> !s.enemy().hand().isEmpty() && s.enemy().hand().stream().noneMatch(CardSnapshot::isHidden)));
+
+        System.out.println();
+        if (failures == 0) {
+            System.out.println("ALL GUI SNAPSHOT CHECKS PASSED");
+        } else {
+            System.out.println(failures + " GUI SNAPSHOT CHECK(S) FAILED");
+            System.exit(1);
+        }
+    }
+
+    private static List<String> names(List<RelicSnapshot> relics) {
+        return relics.stream().map(RelicSnapshot::name).toList();
+    }
+
+    private static State state(MatchSnapshot s, String relic) {
+        return s.you().relics().stream().filter(r -> r.name().equals(relic))
+            .map(RelicSnapshot::state).findFirst().orElse(null);
+    }
+
+    private static long countLensUses(MatchSnapshot s) {
+        return s.log().stream().filter(l -> l.text().startsWith(TestMatches.YOU + " activated " + RelicTest.ACTIVATED)).count();
+    }
+
+    private static boolean usedThenReadyLater(List<MatchSnapshot> snaps) {
+        int usedTurn = -1;
+        for (MatchSnapshot s : snaps) {
+            State st = state(s, RelicTest.ACTIVATED);
+            if (st == State.USED && usedTurn < 0) {
+                usedTurn = s.turn();
+            } else if (st == State.READY && usedTurn >= 0 && s.turn() > usedTurn) {
+                return true;
+            }
+        }
+        return usedTurn < 0;
+    }
+
+    private static void check(String description, boolean ok) {
+        System.out.println((ok ? "  PASS  " : "  FAIL  ") + description);
+        if (!ok) {
+            failures++;
+        }
+    }
+}
