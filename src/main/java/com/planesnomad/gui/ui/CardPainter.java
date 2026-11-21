@@ -63,7 +63,8 @@ public final class CardPainter {
             if (card.faceDown()) {
                 paintBack(g, x, y, w, h);
             } else {
-                Image picture = images.full(card, w, h);
+                // Ability cards always use the frame (only the ability's text), with the source's art.
+                Image picture = card.ability() ? null : images.full(card, w, h);
                 if (picture != null) {
                     Shape clip = round(x, y, w, h);
                     Shape oldClip = g.getClip();
@@ -72,6 +73,13 @@ public final class CardPainter {
                     g.setClip(oldClip);
                     g.setColor(new Color(0, 0, 0, 120));
                     g.draw(clip);
+                    // The picture shows the printed card: show what has changed on top of it.
+                    if (!card.granted().isEmpty()) {
+                        grantedStrip(g, card, x, y, w, h);
+                    }
+                    if (card.statsChanged()) {
+                        statsBadge(g, card, x, y, w, h);
+                    }
                     if (card.damage() > 0) {
                         damageBadge(g, card, x, y, w, h);
                     }
@@ -115,6 +123,64 @@ public final class CardPainter {
             g.draw(clip);
         } finally {
             g.dispose();
+        }
+    }
+
+    /** Green if power+toughness went up, red if down, amber if mixed. */
+    private static Color statsColor(CardSnapshot card) {
+        int dp = card.power() - card.printedPower();
+        int dt = card.toughness() - card.printedToughness();
+        if (dp >= 0 && dt >= 0) {
+            return new Color(0x2E9E4F);
+        }
+        if (dp <= 0 && dt <= 0) {
+            return new Color(0xC8382E);
+        }
+        return new Color(0xC98A1B);
+    }
+
+    /** Current power/toughness over the printed P/T box of a picture. */
+    private static void statsBadge(Graphics2D g, CardSnapshot card, int x, int y, int w, int h) {
+        String text = card.power() + "/" + card.toughness();
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.max(9, (int) (w * 0.13))));
+        FontMetrics fm = g.getFontMetrics();
+        int pad = Math.max(2, w / 30);
+        int bw = fm.stringWidth(text) + 2 * pad;
+        int bh = fm.getHeight();
+        int bx = x + w - bw - pad;
+        int by = y + h - bh - pad;
+        g.setColor(statsColor(card));
+        g.fillRoundRect(bx, by, bw, bh, bh / 2, bh / 2);
+        g.setColor(Color.WHITE);
+        g.drawString(text, bx + pad, by + fm.getAscent());
+    }
+
+    /**
+     * Abilities granted by other cards (not printed on the card), listed on a dark strip over the
+     * lower part of a picture, e.g. "+ Islandwalk".
+     */
+    private static void grantedStrip(Graphics2D g, CardSnapshot card, int x, int y, int w, int h) {
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.max(7, (int) (w * 0.075))));
+        FontMetrics fm = g.getFontMetrics();
+        int pad = Math.max(2, w / 24);
+        List<String> lines = new ArrayList<>();
+        for (String granted : card.granted().split("\n")) {
+            lines.addAll(SymbolText.wrap("+ " + granted, fm, w - 3 * pad));
+        }
+        int maxLines = Math.max(1, (int) (h * 0.35 / fm.getHeight()));
+        if (lines.size() > maxLines) {
+            lines = new ArrayList<>(lines.subList(0, maxLines));
+            lines.set(maxLines - 1, lines.get(maxLines - 1) + " …");
+        }
+        int boxH = lines.size() * fm.getHeight() + pad;
+        int boxY = y + (int) (h * 0.58);
+        g.setColor(new Color(12, 14, 18, 215));
+        g.fillRoundRect(x + pad / 2, boxY, w - pad, boxH, pad, pad);
+        g.setColor(Theme.ACCENT);
+        int lineY = boxY + pad / 2 + fm.getAscent();
+        for (String line : lines) {
+            SymbolText.draw(g, line, x + pad, lineY);
+            lineY += fm.getHeight();
         }
     }
 
@@ -181,11 +247,16 @@ public final class CardPainter {
             SymbolText.draw(g, shown, x + w - pad - SymbolText.width(shown, fm), y + pad + fm.getAscent());
         }
 
-        // Art box (placeholder until images exist)
+        // Art box: the source's art for ability cards, otherwise a placeholder until images exist
         int artTop = y + pad + titleH;
         int artH = (int) (h * (large ? 0.40 : 0.36));
-        g.setColor(Theme.cardArt(card.colors(), card.land()));
-        g.fillRect(x + pad, artTop, w - 2 * pad, artH);
+        Image art = card.ability() ? images.art(card, w - 2 * pad, artH) : null;
+        if (art != null) {
+            g.drawImage(art, x + pad, artTop, null);
+        } else {
+            g.setColor(Theme.cardArt(card.colors(), card.land()));
+            g.fillRect(x + pad, artTop, w - 2 * pad, artH);
+        }
 
         // Type line
         Font typeFont = new Font(Font.SANS_SERIF, Font.PLAIN, Math.max(7, (int) (w * (large ? 0.06 : 0.085))));
@@ -210,11 +281,13 @@ public final class CardPainter {
             int by = y + h - pad - ptH;
             g.setColor(Theme.blend(frame, Color.WHITE, 0.55));
             g.fillRoundRect(bx, by, boxW, ptH, pad, pad);
-            g.setColor(card.damage() > 0 ? Theme.DAMAGE : new Color(0x1A1A1A));
+            g.setColor(card.damage() > 0 ? Theme.DAMAGE : card.statsChanged() ? statsColor(card) : new Color(0x1A1A1A));
             g.drawString(pt, bx + pad, by + pfm.getAscent());
         }
         if (!tiny && h - (typeY - y) > 3 * fm.getHeight()) {
-            Font rulesFont = new Font(Font.SANS_SERIF, Font.PLAIN, Math.max(7, (int) (w * (large ? 0.055 : 0.075))));
+            // Ability cards hold one short ability, so their text can be larger.
+            double share = card.ability() ? (large ? 0.075 : 0.095) : (large ? 0.055 : 0.075);
+            Font rulesFont = new Font(Font.SANS_SERIF, Font.PLAIN, Math.max(7, (int) (w * share)));
             g.setFont(rulesFont);
             FontMetrics rfm = g.getFontMetrics();
             int top = typeY + pad;

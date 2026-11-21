@@ -139,8 +139,9 @@ public final class StackAndLogPanel extends JPanel {
         int thumbH = Theme.px(30);
         int textWidth = Theme.px(WIDTH) - 2 * pad - Theme.px(4) - 2 * pad - Theme.px(14) - thumbW - pad;
         String note = item.resolving() ? "  (resolving)" : top ? "  (resolves next)" : "";
-        JComponent headline = wrapped(item.text() + note, Theme.font(Font.BOLD, 11), Theme.TEXT, textWidth);
-        JComponent detail = wrapped(item.detail(), Theme.font(Font.PLAIN, 11), Theme.TEXT_DIM, textWidth);
+        JComponent headline = wrapped(item.text() + note, Theme.font(Font.BOLD, 11.5), Theme.TEXT, textWidth);
+        // The effect text, a little larger than the log so it reads easily (user request).
+        JComponent detail = wrapped(item.detail(), Theme.font(Font.PLAIN, 12.5), Theme.TEXT, textWidth);
         JPanel text = new JPanel(new BorderLayout());
         text.setOpaque(false);
         text.add(headline, BorderLayout.NORTH);

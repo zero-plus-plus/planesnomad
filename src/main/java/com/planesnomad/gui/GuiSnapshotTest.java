@@ -133,6 +133,20 @@ public final class GuiSnapshotTest {
         check("Right-click / Tab shows the full stack list", ui[3]);
         check("Pop-up disappears again when the stack empties", ui[4]);
 
+        var stackItems = snaps.stream().flatMap(s -> s.stack().stream()).toList();
+        check("Abilities and triggers on the stack are ability cards with only the ability's text",
+            stackItems.stream().filter(i -> i.kind() != MatchSnapshot.StackItem.Kind.SPELL && i.source() != null)
+                .allMatch(i -> i.source().ability() && i.source().rulesText().equals(i.detail())
+                    && i.source().typeLine().endsWith("ability")));
+        check("e.g. the Wayfarer's Compass trigger shows only 'scry 1' text, no card frame text",
+            stackItems.stream().filter(i -> i.text().contains(RelicTest.TRIGGERED)).anyMatch(i ->
+                i.source().rulesText().toLowerCase().contains("scry 1") && i.source().power() == null));
+        check("No engine labels like [Zone Changer: X] in stack text",
+            stackItems.stream().noneMatch(i -> i.detail().matches(".*\\[[A-Z][A-Za-z ]*: [^\\]]*]\\s*$")));
+        check("Spells on the stack stay full cards", stackItems.stream()
+            .filter(i -> i.kind() == MatchSnapshot.StackItem.Kind.SPELL && i.source() != null)
+            .noneMatch(i -> i.source().ability()));
+
         check("Portrait and playmat cards are set for both players (from the match's looks)",
             first.you().portrait() != null && first.you().portrait().name().equals(looks[0].portraitCard())
                 && first.enemy().portrait() != null && first.enemy().portrait().name().equals(looks[1].portraitCard())

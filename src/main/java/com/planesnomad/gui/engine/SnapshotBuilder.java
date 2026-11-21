@@ -171,7 +171,7 @@ public final class SnapshotBuilder {
         return out;
     }
 
-    static CardSnapshot card(Card c) {
+    public static CardSnapshot card(Card c) {
         Combat combat = c.getGame().getCombat();
         IPaperCard paper = c.getPaperCard();
         boolean creature = c.isCreature();
@@ -204,7 +204,11 @@ public final class SnapshotBuilder {
             c.isFaceDown(),
             imageKey(paper),
             paper instanceof forge.item.PaperCard pc ? pc.getArtIndex() : 1,
-            paper instanceof forge.item.PaperCard pc2 ? com.planesnomad.gui.images.CardLayouts.of(pc2.getRules()) : "normal"
+            paper instanceof forge.item.PaperCard pc2 ? com.planesnomad.gui.images.CardLayouts.of(pc2.getRules()) : "normal",
+            granted(c),
+            creature ? printedPower(c) : null,
+            creature ? printedToughness(c) : null,
+            false
         );
     }
 
@@ -236,12 +240,94 @@ public final class SnapshotBuilder {
         return "";
     }
 
+    /**
+     * The card's text as it is now, including abilities granted by other cards (e.g. a lord's
+     * islandwalk). Falls back to the printed text if the engine gives none.
+     */
     private static String rulesText(Card c) {
-        String text = c.getOracleText();
+        String text = c.getAbilityText();
         if (text == null || text.isBlank()) {
-            text = c.getAbilityText();
+            text = c.getOracleText();
         }
         return text == null ? "" : text.replace("\\n", "\n").trim();
+    }
+
+    /**
+     * Abilities the card has now that aren't printed on it (granted by other cards, e.g. a lord's
+     * islandwalk), one per line. Uses the engine's own record of which keywords, abilities,
+     * triggers and static effects are intrinsic, not a comparison of texts (texts are worded
+     * differently, which gave false positives).
+     */
+    public static String granted(Card c) {
+        if (c.isFaceDown()) {
+            return "";
+        }
+        java.util.LinkedHashSet<String> lines = new java.util.LinkedHashSet<>();
+        try {
+            // Skip grants that come from the card's own printed effects (e.g. a Sliver that gives
+            // all Slivers first strike, or "as long as this is untapped, it has protection ..."):
+            // they are already in its printed text.
+            for (forge.game.keyword.KeywordInterface kw : c.getUnhiddenKeywords()) {
+                if (!kw.isIntrinsic() && !fromSelf(c, kw.getStatic() != null ? kw.getStatic().getHostCard() : null)) {
+                    lines.add(kw.getTitle());
+                }
+            }
+            for (SpellAbility sa : c.getSpellAbilities()) {
+                if (!sa.isIntrinsic() && sa.getKeyword() == null && !sa.isSpell() && !sa.isLandAbility()
+                    && !fromSelf(c, sa.getOriginalHost())) {
+                    add(lines, sa.getDescription());
+                }
+            }
+            for (forge.game.trigger.Trigger t : c.getTriggers()) {
+                if (!t.isIntrinsic() && t.getKeyword() == null && !t.isSecondary()
+                    && !fromSelf(c, t.getOriginalHost())) {
+                    add(lines, t.toString());
+                }
+            }
+            for (forge.game.staticability.StaticAbility st : c.getStaticAbilities()) {
+                if (!st.isIntrinsic() && st.getKeyword() == null && !st.isSecondary()
+                    && !fromSelf(c, st.getOriginalHost())) {
+                    add(lines, st.toString());
+                }
+            }
+        } catch (RuntimeException e) {
+            return "";   // a display detail must never break the match
+        }
+        return String.join("\n", lines);
+    }
+
+    /** True if a non-intrinsic trait came from the card itself (a self-grant), or its origin is unknown. */
+    private static boolean fromSelf(Card c, Card source) {
+        return source == null || source.equals(c);
+    }
+
+    private static void add(java.util.Set<String> lines, String text) {
+        if (text == null) {
+            return;
+        }
+        String clean = TRIGGER_LABEL.matcher(text.replaceAll("\\s*\\([^)]*\\)", "")).replaceAll("").trim();
+        if (!clean.isEmpty()) {
+            lines.add(clean);
+        }
+    }
+
+    /** Printed power, or null if it isn't a fixed number (e.g. star power) or unknown. */
+    private static Integer printedPower(Card c) {
+        try {
+            int v = c.getRules() == null ? c.getBasePower() : c.getRules().getIntPower();
+            return v < 0 ? null : v;
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    private static Integer printedToughness(Card c) {
+        try {
+            int v = c.getRules() == null ? c.getBaseToughness() : c.getRules().getIntToughness();
+            return v < 0 ? null : v;
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     private static String colors(ColorSet set) {
@@ -337,11 +423,11 @@ public final class SnapshotBuilder {
             out.add(new StackItem(
                 who == null ? "" : who.getName(),
                 (who == null ? "" : who.getName() + " ") + verb + " " + name,
-                detail == null ? "" : CARD_ID.matcher(detail).replaceAll("").trim().replaceFirst("^-\\s*", ""),
+                cleanDetail(detail),
                 who == you,
                 kind,
                 sa != null && sa == resolvingNow,
-                source == null ? null : card(source),
+                source == null ? null : stackCard(source, kind, detail),
                 source == null ? null : relicOf(source)));
         }
         return out;
@@ -385,6 +471,29 @@ public final class SnapshotBuilder {
             return first.replace("[", "").replace("]", "");
         }
         return first;
+    }
+
+    /**
+     * What the stack pop-up draws: spells as their card; abilities and triggers as an ability card
+     * with the source's name and art but only the ability's own text (the card may have gained it
+     * from elsewhere, so its printed text isn't the right thing to show).
+     */
+    private static CardSnapshot stackCard(Card source, StackItem.Kind kind, String detail) {
+        CardSnapshot card = card(source);
+        if (kind == StackItem.Kind.SPELL) {
+            return card;
+        }
+        String text = cleanDetail(detail);
+        return card.asAbility(kind == StackItem.Kind.TRIGGER ? "Triggered ability" : "Activated ability", text);
+    }
+
+    /** Stack text without card ids, leading dashes or engine labels like "[Zone Changer: X]". */
+    private static String cleanDetail(String detail) {
+        if (detail == null) {
+            return "";
+        }
+        String text = CARD_ID.matcher(detail).replaceAll("").trim().replaceFirst("^-\\s*", "");
+        return TRIGGER_LABEL.matcher(text).replaceAll("").trim();
     }
 
     private List<LogLine> log() {
