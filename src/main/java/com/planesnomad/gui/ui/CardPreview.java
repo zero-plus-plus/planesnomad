@@ -79,8 +79,11 @@ public final class CardPreview {
             hoverWindow.setContentPane(hoverCanvas);
             hoverWindow.setFocusableWindowState(false);
         }
-        int w = Theme.px(HOVER_WIDTH);
-        int h = (int) (w / Theme.CARD_ASPECT);
+        int cw = Theme.px(HOVER_WIDTH);
+        int ch = (int) (cw / Theme.CARD_ASPECT);
+        java.awt.Dimension size = InspectPainter.size(card, cw, ch);
+        int w = size.width;
+        int h = size.height;
         hoverCanvas.card = card;
         hoverWindow.setSize(w, h);
 
@@ -134,8 +137,13 @@ public final class CardPreview {
             largeWindow.setContentPane(largeCanvas);
             largeWindow.setFocusableWindowState(false);
         }
-        int h = (int) (owner.getHeight() * LARGE_HEIGHT_SHARE);
-        int w = (int) (h * Theme.CARD_ASPECT);
+        int ch = (int) (owner.getHeight() * LARGE_HEIGHT_SHARE);
+        int cw = (int) (ch * Theme.CARD_ASPECT);
+        java.awt.Dimension size = InspectPainter.size(hovered, cw, ch);
+        // Keep the whole inspection inside the window: shrink if the text panel makes it too big.
+        double fit = Math.min(1.0, Math.min(owner.getWidth() * 0.95 / size.width, owner.getHeight() * 0.95 / size.height));
+        int w = (int) (size.width * fit);
+        int h = (int) (size.height * fit);
         largeCanvas.card = hovered;
         largeWindow.setSize(w, h);
         largeWindow.setLocation(owner.getX() + (owner.getWidth() - w) / 2, owner.getY() + (owner.getHeight() - h) / 2);
@@ -175,12 +183,17 @@ public final class CardPreview {
             if (card == null) {
                 return;
             }
-            // Fit a card of the right proportions inside the component.
-            int w = getWidth();
-            int h = getHeight();
-            int cw = Math.min(w, (int) (h * Theme.CARD_ASPECT));
-            int ch = (int) (cw / Theme.CARD_ASPECT);
-            CardPainter.paint((Graphics2D) g, card, (w - cw) / 2, (h - ch) / 2, cw, ch);
+            // Draw the card for inspection (current text, granted abilities in color) at a
+            // reference size, scaled to fit the component.
+            int refW = 300;
+            int refH = (int) (refW / Theme.CARD_ASPECT);
+            java.awt.Dimension need = InspectPainter.size(card, refW, refH);
+            double scale = Math.min(getWidth() / (double) need.width, getHeight() / (double) need.height);
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.translate((getWidth() - need.width * scale) / 2, (getHeight() - need.height * scale) / 2);
+            g2.scale(scale, scale);
+            InspectPainter.paint(g2, card, 0, 0, refW, refH);
+            g2.dispose();
         }
     }
 }

@@ -55,6 +55,14 @@ public final class CardPainter {
     }
 
     public static void paint(Graphics2D g0, CardSnapshot card, int x, int y, int w, int h) {
+        paint(g0, card, x, y, w, h, true);
+    }
+
+    /**
+     * @param grantedStrip false when the caller shows the card's current text itself (inspection),
+     *                     so granted abilities aren't also listed over the picture
+     */
+    public static void paint(Graphics2D g0, CardSnapshot card, int x, int y, int w, int h, boolean grantedStrip) {
         Graphics2D g = (Graphics2D) g0.create();
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
@@ -74,7 +82,7 @@ public final class CardPainter {
                     g.setColor(new Color(0, 0, 0, 120));
                     g.draw(clip);
                     // The picture shows the printed card: show what has changed on top of it.
-                    if (!card.granted().isEmpty()) {
+                    if (grantedStrip && !card.granted().isEmpty()) {
                         grantedStrip(g, card, x, y, w, h);
                     }
                     if (card.statsChanged()) {

@@ -109,21 +109,43 @@ public final class GrantedTextTest {
             raiderSnap.rulesText().toLowerCase().contains("can't block")
                 && raiderSnap.rulesText().toLowerCase().contains("mountainwalk"));
 
-        // 3. Picture sheet: board size and preview size (needs -Dplanesnomad.cardImages for pictures).
+        // Inspection text: printed abilities first, granted ones after and marked; nothing extra
+        // for a card that hasn't changed.
+        var krenkoLines = com.planesnomad.gui.ui.InspectPainter.currentText(snapshot(krenko));
+        int firstGranted = -1;
+        int lastPrinted = -1;
+        for (int i = 0; i < krenkoLines.size(); i++) {
+            if (krenkoLines.get(i).granted()) {
+                if (firstGranted < 0) firstGranted = i;
+            } else {
+                lastPrinted = i;
+            }
+        }
+        check("Inspection text: Krenko's printed ability first, granted mountainwalk after it, marked as granted",
+            lastPrinted >= 0 && firstGranted > lastPrinted
+                && krenkoLines.get(firstGranted).text().toLowerCase().contains("mountainwalk"));
+        CardSnapshot lordSnap = snapshot(lord);
+        int cw0 = 240, ch0 = 335;
+        check("Inspection always shows the text panel beside the card (also for an unchanged card)",
+            com.planesnomad.gui.ui.InspectPainter.size(lordSnap, cw0, ch0).width > cw0
+                && com.planesnomad.gui.ui.InspectPainter.size(merfolkSnap, cw0, ch0).width > cw0);
+        check("Unchanged card: no granted lines in its inspection text",
+            com.planesnomad.gui.ui.InspectPainter.currentText(lordSnap).stream().noneMatch(l -> l.granted()));
+
+        // 3. Inspection sheet (side panel with full current text) for each example card.
         if (args.length > 0) {
             CardImages images = ImageSetup.create();
-            List<CardSnapshot> cards = List.of(merfolkSnap, raiderSnap);
+            List<CardSnapshot> cards = List.of(merfolkSnap, raiderSnap, snapshot(krenko), lordSnap);
             images.preloadNow(cards);
-            int bw = 63 * 2, bh = 88 * 2, pw = 300, ph = 419, pad = 14;
-            BufferedImage img = new BufferedImage(pad + cards.size() * (bw + pw + 2 * pad), ph + 2 * pad, BufferedImage.TYPE_INT_RGB);
+            int cw = 240, ch = 335, pad = 16;
+            int cellW = com.planesnomad.gui.ui.InspectPainter.size(cards.get(0), cw, ch).width;
+            BufferedImage img = new BufferedImage(pad + 2 * (cellW + pad), pad + 2 * (ch + pad), BufferedImage.TYPE_INT_RGB);
             Graphics2D g = img.createGraphics();
             g.setColor(new Color(0x15181D));
             g.fillRect(0, 0, img.getWidth(), img.getHeight());
-            int x = pad;
-            for (CardSnapshot c : cards) {
-                CardPainter.paint(g, c, x, pad, bw, bh);
-                CardPainter.paint(g, c, x + bw + pad, pad, pw, ph);
-                x += bw + pw + 2 * pad;
+            for (int i = 0; i < cards.size(); i++) {
+                com.planesnomad.gui.ui.InspectPainter.paint(g, cards.get(i),
+                    pad + (i % 2) * (cellW + pad), pad + (i / 2) * (ch + pad), cw, ch);
             }
             g.dispose();
             ImageIO.write(img, "png", new File(args[0]));
