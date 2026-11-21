@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 
 /**
  * Finds, loads and scales card pictures from local folders. Images are never bundled with the
@@ -32,6 +33,10 @@ import java.util.concurrent.Executors;
  *   1. {folder}/{key folder}/{name}.fullborder.jpg   (also .full.jpg, .jpg, .png)
  *   2. {folder}/{set code}/{name}...                 (set code instead of Forge's short code)
  *   3. {folder}/{name}...                            (flat folder, e.g. a handful of test images)
+ *
+ * If the card's own printing has no picture, any other printing of the same card is used
+ * (newest set first, regular printings before alternate arts); the art crop then follows the
+ * printing actually shown.
  *
  * Loading runs on a background thread; until a picture is ready the caller gets null and
  * draws the text frame. Listeners are told when new pictures arrive, so the screen repaints.
@@ -56,8 +61,17 @@ public final class CardImages {
     private final Set<String> pending = Collections.synchronizedSet(new HashSet<>());
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
-    /** A loaded picture and the art crop box for its set (if known). */
+    /** A loaded picture and the art crop box for the printing it shows (if known). */
     private record Loaded(BufferedImage image, ArtCrops.Box artBox) { }
+
+    /**
+     * One printing of a card, enough to find its picture and choose its crop box.
+     * @param imageKey Forge image key, e.g. "U/Shivan Dragon.full"
+     */
+    public record Printing(String setCode, String imageKey, int artIndex) { }
+
+    /** Other printings of a card by name, in preference order; empty if none are known. */
+    private Function<String, List<Printing>> otherPrintings = name -> List.of();
 
     public CardImages(List<Path> folders, ArtCrops crops) {
         this.folders = List.copyOf(folders);
@@ -66,6 +80,11 @@ public final class CardImages {
 
     public List<Path> folders() {
         return folders;
+    }
+
+    /** Where to find other printings of a card (by name) when its own printing has no picture. */
+    public void setOtherPrintings(Function<String, List<Printing>> source) {
+        otherPrintings = source == null ? name -> List.of() : source;
     }
 
     public void addListener(Runnable onNewImages) {
@@ -166,22 +185,15 @@ public final class CardImages {
                 return known.orElse(null);
             }
         }
-        Loaded loaded = null;
-        for (Path file : candidates(card)) {
-            if (Files.isRegularFile(file)) {
-                try {
-                    BufferedImage img = ImageIO.read(file.toFile());
-                    if (img != null) {
-                        // The crop box comes from the card's printing (its set). In a flat folder
-                        // the file's printing isn't certain, but the lookup was for this printing.
-                        boolean basicLand = card.typeLine() != null && card.typeLine().contains("Basic");
-                        ArtCrops.Box box = crops.find(card.setCode(), keyFolder(card), card.layout(),
-                            card.artIndex(), basicLand).orElse(null);
-                        loaded = new Loaded(img, box);
-                        break;
-                    }
-                } catch (IOException e) {
-                    System.err.println("Could not read card image " + file + ": " + e.getMessage());
+        Loaded loaded = loadPrinting(card, new Printing(card.setCode(), card.imageKey(), card.artIndex()));
+        if (loaded == null) {
+            for (Printing other : otherPrintings.apply(card.name())) {
+                if (other.imageKey() != null && other.imageKey().equals(card.imageKey())) {
+                    continue;
+                }
+                loaded = loadPrinting(card, other);
+                if (loaded != null) {
+                    break;
                 }
             }
         }
@@ -191,10 +203,38 @@ public final class CardImages {
         return loaded;
     }
 
-    /** Where to look for this card's picture, most specific first. */
+    /** Loads the picture of one printing of the card, with that printing's crop box. */
+    private Loaded loadPrinting(CardSnapshot card, Printing printing) {
+        for (Path file : candidates(card, printing)) {
+            if (!Files.isRegularFile(file)) {
+                continue;
+            }
+            try {
+                BufferedImage img = ImageIO.read(file.toFile());
+                if (img != null) {
+                    // The crop box follows the printing shown. In a flat folder the file's printing
+                    // isn't certain, but the lookup was for this printing.
+                    boolean basicLand = card.typeLine() != null && card.typeLine().contains("Basic");
+                    ArtCrops.Box box = crops.find(printing.setCode(), keyFolder(printing.imageKey()),
+                        card.layout(), printing.artIndex(), basicLand).orElse(null);
+                    return new Loaded(img, box);
+                }
+            } catch (IOException e) {
+                System.err.println("Could not read card image " + file + ": " + e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    /** Where to look for the card's own printing's picture, most specific first. */
     List<Path> candidates(CardSnapshot card) {
-        String keyFolder = keyFolder(card);
-        String keyName = keyName(card);
+        return candidates(card, new Printing(card.setCode(), card.imageKey(), card.artIndex()));
+    }
+
+    /** Where to look for one printing's picture, most specific first. */
+    List<Path> candidates(CardSnapshot card, Printing printing) {
+        String keyFolder = keyFolder(printing.imageKey());
+        String keyName = keyName(printing.imageKey(), card.name());
         List<String> names = new ArrayList<>();
         names.add(keyName);
         String plain = safe(card.name());
@@ -207,8 +247,9 @@ public final class CardImages {
             if (!keyFolder.isEmpty()) {
                 dirs.add(folder.resolve(keyFolder));
             }
-            if (card.setCode() != null && !card.setCode().isEmpty() && !card.setCode().equals(keyFolder)) {
-                dirs.add(folder.resolve(card.setCode()));
+            String set = printing.setCode();
+            if (set != null && !set.isEmpty() && !set.equals(keyFolder)) {
+                dirs.add(folder.resolve(set));
             }
             dirs.add(folder);
             for (Path dir : dirs) {
@@ -228,8 +269,7 @@ public final class CardImages {
     }
 
     /** "U/Shivan Dragon.full" -> "U". */
-    private static String keyFolder(CardSnapshot card) {
-        String key = card.imageKey();
+    private static String keyFolder(String key) {
         if (key == null) {
             return "";
         }
@@ -237,11 +277,10 @@ public final class CardImages {
         return slash > 0 ? key.substring(0, slash) : "";
     }
 
-    /** "U/Mountain2.full" -> "Mountain2". */
-    private static String keyName(CardSnapshot card) {
-        String key = card.imageKey();
+    /** "U/Mountain2.full" -> "Mountain2"; the card name if there is no key. */
+    private static String keyName(String key, String cardName) {
         if (key == null || key.isEmpty()) {
-            return safe(card.name());
+            return safe(cardName);
         }
         String name = key.substring(key.indexOf('/') + 1);
         return name.endsWith(".full") ? name.substring(0, name.length() - 5) : name;

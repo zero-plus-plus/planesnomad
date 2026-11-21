@@ -37,6 +37,7 @@ public final class CardImagesTest {
         CardDb db = ForgeEngine.initialize();
         ArtCrops crops = ArtCrops.load(Path.of("data", "art-crops.txt"));
         CardImages images = new CardImages(List.of(pictures), crops);
+        images.setOtherPrintings(ImageSetup::printingsOf);
         CardPainter.setImageSource(new CardPainter.ImageSource() {
             @Override
             public Image full(CardSnapshot card, int w, int h) {
@@ -112,10 +113,21 @@ public final class CardImagesTest {
         check("Land art index is part of the image key (" + mountain2.imageKey() + ")",
             mountain2.imageKey().contains("Mountain2") && mountain1.imageKey().contains("Mountain1"));
 
-        // A printing with no picture in the folder: text frame (null), no crash.
+        // A printing with no picture of its own falls back to another printing of the same card.
         CardSnapshot shock = snap(db, "Shock", "10E", 1);
-        check("No picture for Shock (10E): falls back to the text frame", !images.hasImage(shock)
-            && images.full(shock, 63, 88) == null && images.art(shock, 40, 30) == null);
+        boolean ownMissing = new CardImages(List.of(pictures), crops).hasImage(shock) == false;
+        check("Shock (10E) has no picture of its own in the folder", ownMissing);
+        check("...so another printing's picture is shown, with that printing's art crop",
+            images.hasImage(shock) && images.art(shock, 120, 88) != null);
+        sheet.add(shock);
+        java.util.List<CardImages.Printing> order = ImageSetup.printingsOf("Shock");
+        check("Other printings are tried newest first, regular before alternate art",
+            !order.isEmpty() && order.get(0).artIndex() == 1);
+
+        // A card with no printing in the folder at all: text frame (null), no crash.
+        CardSnapshot custom = snap(db, "Ember Charm", "PNO", 1);
+        check("No picture anywhere (Ember Charm, our own card): text frame", custom != null
+            && !images.hasImage(custom) && images.full(custom, 63, 88) == null && images.art(custom, 40, 30) == null);
 
         // A set with pictures but no crop box yet: full picture yes, art crop no.
         check("Crop boxes only for checked sets (none for an unknown set code)", crops.find("ZZZ", "ZZZ").isEmpty());

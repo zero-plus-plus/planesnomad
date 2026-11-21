@@ -41,6 +41,7 @@ public final class ImageSetup {
         forgeCache().ifPresent(folders::add);
         ManaSymbols.setFolder(symbolFolder(folders));
         CardImages images = new CardImages(folders, ArtCrops.load(Path.of("data", "art-crops.txt")));
+        images.setOtherPrintings(ImageSetup::printingsOf);
         CardPainter.setImageSource(new CardPainter.ImageSource() {
             @Override
             public java.awt.Image full(com.planesnomad.gui.model.CardSnapshot card, int w, int h) {
@@ -53,6 +54,33 @@ public final class ImageSetup {
             }
         });
         return images;
+    }
+
+    private static final java.util.Map<String, List<CardImages.Printing>> PRINTINGS = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * All printings of a card known to the engine, newest set first, regular printings before
+     * alternate arts. Used when a card's own printing has no picture.
+     */
+    public static List<CardImages.Printing> printingsOf(String name) {
+        return PRINTINGS.computeIfAbsent(name, n -> {
+            if (forge.StaticData.instance() == null) {
+                return List.of();
+            }
+            List<forge.item.PaperCard> all = new ArrayList<>(forge.StaticData.instance().getCommonCards().getAllCards(n));
+            var editions = forge.StaticData.instance().getEditions();
+            all.sort(java.util.Comparator
+                .comparing((forge.item.PaperCard pc) -> pc.getArtIndex() > 1)
+                .thenComparing(pc -> {
+                    var ed = editions.get(pc.getEdition());
+                    return ed == null || ed.getDate() == null ? new java.util.Date(0) : ed.getDate();
+                }, java.util.Comparator.reverseOrder()));
+            List<CardImages.Printing> out = new ArrayList<>();
+            for (forge.item.PaperCard pc : all) {
+                out.add(new CardImages.Printing(pc.getEdition(), pc.getCardImageKey(), pc.getArtIndex()));
+            }
+            return List.copyOf(out);
+        });
     }
 
     /** The symbol folder to use, or null if none is found. */
