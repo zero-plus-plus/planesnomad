@@ -1,0 +1,6 @@
+Name:Tinker's Lens
+ManaCost:no cost
+Types:Artifact
+# Planesnomad relic (activated). Lives in the command zone; shown as a relic in the UI.
+A:AB$ Draw | Cost$ 2 | ActivationZone$ Command | ActivationLimit$ 1 | NumCards$ 1 | SpellDescription$ Draw a card. Activate only once each turn.
+Oracle:{2}: Draw a card. Activate only once each turn.
