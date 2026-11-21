@@ -28,6 +28,10 @@ import java.awt.geom.RoundRectangle2D;
 public final class RelicIcon extends JComponent {
 
     private static final int SIZE = 34;
+    /** Dark backing behind icon pictures, so any emoji reads on the top bar. */
+    private static final Color BACKING = new Color(0x5B6574);
+    /** Icon picture size as a share of the backing shape. */
+    private static final double ICON_SHARE = 0.72;
 
     private RelicSnapshot relic;
     private final boolean consumableSlot;
@@ -92,15 +96,21 @@ public final class RelicIcon extends JComponent {
             ? new RoundRectangle2D.Double(x, y, d, d, d / 3.0, d / 3.0)
             : new Ellipse2D.Double(x, y, d, d);
         Color base = new Color(relic.color());
-        g.setColor(Theme.blend(base, Color.BLACK, 0.25));
+        java.awt.image.BufferedImage icon = RelicImages.get(relic.icon(), false);
+        g.setColor(icon != null ? BACKING : Theme.blend(base, Color.BLACK, 0.25));
         g.fill(shape);
-        g.setColor(Theme.blend(base, Color.WHITE, 0.35));
+        g.setColor(icon != null ? Theme.blend(base, BACKING, 0.4) : Theme.blend(base, Color.WHITE, 0.35));
         g.setStroke(new BasicStroke(Math.max(1f, d / 22f)));
         g.draw(shape);
-        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.max(8, (int) (d * 0.47))));
-        FontMetrics fm = g.getFontMetrics();
-        g.setColor(Theme.TEXT);
-        g.drawString(relic.glyph(), x + (d - fm.stringWidth(relic.glyph())) / 2, y + (d + fm.getAscent() - fm.getDescent()) / 2);
+        if (icon != null) {
+            int s = (int) (d * ICON_SHARE);
+            RelicImages.draw(g, icon, x + (d - s) / 2, y + (d - s) / 2, s);
+        } else {
+            g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.max(8, (int) (d * 0.47))));
+            FontMetrics fm = g.getFontMetrics();
+            g.setColor(Theme.TEXT);
+            g.drawString(relic.glyph(), x + (d - fm.stringWidth(relic.glyph())) / 2, y + (d + fm.getAscent() - fm.getDescent()) / 2);
+        }
         g.dispose();
     }
 
@@ -142,23 +152,31 @@ public final class RelicIcon extends JComponent {
 
         boolean used = relic.state() == State.USED;
         Color base = new Color(relic.color());
-        Color fill = used ? Theme.RELIC_USED : base;
-        g.setColor(Theme.blend(fill, Color.BLACK, 0.25));
+        java.awt.image.BufferedImage picture = RelicImages.get(relic.icon(), used);
+        Color fill = picture != null ? BACKING : used ? Theme.RELIC_USED : base;
+        g.setColor(picture != null ? fill : Theme.blend(fill, Color.BLACK, 0.25));
         g.fill(shape);
         g.setColor(used ? Theme.blend(Theme.RELIC_USED, Color.WHITE, 0.2)
             : relic.state() == State.READY ? Theme.RELIC_GLOW
+            : picture != null ? Theme.blend(base, BACKING, 0.4)
             : Theme.blend(base, Color.WHITE, 0.35));
         g.setStroke(new BasicStroke(Math.max(1f, Theme.px(1.5))));
         g.draw(shape);
 
-        if (used) {
-            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
+        if (picture != null) {
+            // The greyed-out picture is already faded; color pictures draw as they are.
+            int s = (int) (d * ICON_SHARE);
+            RelicImages.draw(g, picture, x + (d - s) / 2, y + (d - s) / 2, s);
+        } else {
+            if (used) {
+                g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.45f));
+            }
+            g.setFont(Theme.font(Font.BOLD, 16));
+            FontMetrics fm = g.getFontMetrics();
+            g.setColor(Theme.TEXT);
+            String glyph = relic.glyph();
+            g.drawString(glyph, x + (d - fm.stringWidth(glyph)) / 2, y + (d + fm.getAscent() - fm.getDescent()) / 2);
         }
-        g.setFont(Theme.font(Font.BOLD, 16));
-        FontMetrics fm = g.getFontMetrics();
-        g.setColor(Theme.TEXT);
-        String glyph = relic.glyph();
-        g.drawString(glyph, x + (d - fm.stringWidth(glyph)) / 2, y + (d + fm.getAscent() - fm.getDescent()) / 2);
         g.dispose();
     }
 }

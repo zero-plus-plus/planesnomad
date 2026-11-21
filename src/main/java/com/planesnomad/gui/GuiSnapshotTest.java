@@ -72,9 +72,10 @@ public final class GuiSnapshotTest {
             check("Activated relic shows USED (greyed out) after use", lensUsed);
             // The once-per-turn limit resets each turn: a used relic must not still be greyed
             // out at the start of a turn (untap/upkeep), whatever happens later in the match.
-            check("USED resets at the start of the next turn (never USED in untap/upkeep)",
+            check("USED resets at the start of the next turn (untap/upkeep: USED only if used this turn)",
                 snaps.stream().filter(s -> s.phase().startsWith("Untap") || s.phase().startsWith("Upkeep"))
-                    .noneMatch(s -> state(s, RelicTest.ACTIVATED) == State.USED));
+                    .filter(s -> state(s, RelicTest.ACTIVATED) == State.USED)
+                    .allMatch(GuiSnapshotTest::lensUsedThisTurn));
             check("USED is followed by READY again on a later turn (when the match goes on)",
                 usedThenReadyLater(snaps));
         }
@@ -174,6 +175,20 @@ public final class GuiSnapshotTest {
     private static State state(MatchSnapshot s, String relic) {
         return s.you().relics().stream().filter(r -> r.name().equals(relic))
             .map(RelicSnapshot::state).findFirst().orElse(null);
+    }
+
+    /** True if the log shows Tinker's Lens activated since the latest turn header. */
+    private static boolean lensUsedThisTurn(MatchSnapshot s) {
+        for (int i = s.log().size() - 1; i >= 0; i--) {
+            MatchSnapshot.LogLine line = s.log().get(i);
+            if (line.turnHeader()) {
+                return false;
+            }
+            if (line.text().startsWith(TestMatches.YOU + " activated " + RelicTest.ACTIVATED)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static long countLensUses(MatchSnapshot s) {

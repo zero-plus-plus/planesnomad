@@ -7,7 +7,8 @@ package com.planesnomad.gui.model;
  * @param kind   what sort of relic this is (affects how the icon is drawn)
  * @param state  usable now (glow), used (greyed out until usable again), or idle
  * @param color  placeholder color until relic art exists, as 0xRRGGBB
- * @param glyph  short placeholder symbol drawn on the icon
+ * @param glyph  short placeholder letter, used if the icon file is missing
+ * @param icon   icon file name in data/relic-icons
  */
 public record RelicSnapshot(
     String name,
@@ -15,7 +16,8 @@ public record RelicSnapshot(
     Kind kind,
     State state,
     int color,
-    String glyph
+    String glyph,
+    String icon
 ) {
     public enum Kind {
         /** Always-on effect. */

@@ -200,7 +200,7 @@ public final class SnapshotBuilder {
     private RelicSnapshot relicOf(Card c) {
         return RelicCatalog.find(c.getName()).map(info -> new RelicSnapshot(c.getName(),
             info.description() != null ? info.description() : rulesText(c), info.kind(),
-            State.IDLE, info.color(), info.glyph())).orElse(null);
+            State.IDLE, info.color(), info.glyph(), info.icon())).orElse(null);
     }
 
     private List<RelicSnapshot> relics(Player p) {
@@ -209,7 +209,7 @@ public final class SnapshotBuilder {
             RelicCatalog.find(c.getName()).ifPresent(info -> {
                 String description = info.description() != null ? info.description() : rulesText(c);
                 out.add(new RelicSnapshot(c.getName(), description, info.kind(),
-                    relicState(c, p, info.kind()), info.color(), info.glyph()));
+                    relicState(c, p, info.kind()), info.color(), info.glyph(), info.icon()));
             });
         }
         return out;
