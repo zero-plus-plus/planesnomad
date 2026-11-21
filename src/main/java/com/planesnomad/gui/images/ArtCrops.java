@@ -3,7 +3,11 @@ package com.planesnomad.gui.images;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -22,6 +26,7 @@ public final class ArtCrops {
     public record Box(double left, double top, double right, double bottom) { }
 
     private final Map<String, Box> bySet = new HashMap<>();
+    private final Set<String> altArtsNoCrop = new HashSet<>();
 
     private ArtCrops() { }
 
@@ -31,17 +36,40 @@ public final class ArtCrops {
             return crops;
         }
         try {
-            int lineNo = 0;
+            // Join continued lines (trailing backslash), dropping comments first.
+            List<String> lines = new ArrayList<>();
+            StringBuilder pending = new StringBuilder();
             for (String raw : Files.readAllLines(file)) {
-                lineNo++;
                 String line = raw.replaceFirst("#.*", "").trim();
-                if (line.isEmpty()) {
+                boolean continues = line.endsWith("\\");
+                if (continues) {
+                    line = line.substring(0, line.length() - 1).trim();
+                }
+                pending.append(pending.length() > 0 && !line.isEmpty() ? " " : "").append(line);
+                if (!continues) {
+                    if (pending.length() > 0) {
+                        lines.add(pending.toString());
+                    }
+                    pending.setLength(0);
+                }
+            }
+            for (String line : lines) {
+                String[] parts = line.split("=", 2);
+                if (parts.length != 2) {
+                    System.err.println("art-crops.txt line ignored: " + line);
                     continue;
                 }
-                String[] parts = line.split("=");
-                String[] nums = parts.length == 2 ? parts[1].trim().split("\\s*,\\s*") : new String[0];
+                String key = parts[0].trim();
+                String value = parts[1].trim();
+                if (key.equalsIgnoreCase("ALT-ARTS-NO-CROP")) {
+                    for (String set : value.split(",")) {
+                        crops.altArtsNoCrop.add(set.trim().toUpperCase(Locale.ROOT));
+                    }
+                    continue;
+                }
+                String[] nums = value.split("\\s*,\\s*");
                 if (nums.length != 4) {
-                    System.err.println("art-crops.txt line " + lineNo + " ignored: " + raw);
+                    System.err.println("art-crops.txt line ignored: " + line);
                     continue;
                 }
                 Box box = new Box(
@@ -49,7 +77,7 @@ public final class ArtCrops {
                     Integer.parseInt(nums[1]) / (double) REF_HEIGHT,
                     Integer.parseInt(nums[2]) / (double) REF_WIDTH,
                     Integer.parseInt(nums[3]) / (double) REF_HEIGHT);
-                for (String set : parts[0].split(",")) {
+                for (String set : key.split(",")) {
                     crops.bySet.put(set.trim().toUpperCase(Locale.ROOT), box);
                 }
             }
@@ -59,16 +87,46 @@ public final class ArtCrops {
         return crops;
     }
 
+    /** Normal-layout box for a set (no layout or printing rules applied). */
+    public Optional<Box> find(String setCode, String imageFolder) {
+        return find(setCode, imageFolder, CardLayouts.NORMAL, 1, false);
+    }
+
     /**
+     * The crop box for one printing, or empty if it should get no crop.
+     *
      * @param setCode     the card's set code (e.g. 2ED)
      * @param imageFolder the folder part of Forge's image key (e.g. U), may be empty
+     * @param layout      card layout (see {@link CardLayouts}); special layouts need their own box
+     * @param artIndex    which printing in the set (1 = regular)
+     * @param basicLand   basic lands are never treated as special printings
      */
-    public Optional<Box> find(String setCode, String imageFolder) {
-        Box box = setCode == null ? null : bySet.get(setCode.toUpperCase(Locale.ROOT));
-        if (box == null && imageFolder != null && !imageFolder.isEmpty()) {
-            box = bySet.get(imageFolder.toUpperCase(Locale.ROOT));
+    public Optional<Box> find(String setCode, String imageFolder, String layout, int artIndex, boolean basicLand) {
+        List<String> codes = new ArrayList<>();
+        if (setCode != null && !setCode.isEmpty()) {
+            codes.add(setCode.toUpperCase(Locale.ROOT));
         }
-        return Optional.ofNullable(box);
+        if (imageFolder != null && !imageFolder.isEmpty()) {
+            codes.add(imageFolder.toUpperCase(Locale.ROOT));
+        }
+        if (artIndex > 1 && !basicLand && codes.stream().anyMatch(altArtsNoCrop::contains)) {
+            return Optional.empty();   // possibly a showcase/borderless frame
+        }
+        boolean special = layout != null && !layout.equals(CardLayouts.NORMAL);
+        for (String code : codes) {
+            Box box = bySet.get(special ? code + "@" + layout.toUpperCase(Locale.ROOT) : code);
+            if (box != null) {
+                return Optional.of(box);
+            }
+        }
+        if (special) {
+            // "*@layout" applies to every set that has a (checked) normal box.
+            Box any = bySet.get("*@" + layout.toUpperCase(Locale.ROOT));
+            if (any != null && codes.stream().anyMatch(bySet::containsKey)) {
+                return Optional.of(any);
+            }
+        }
+        return Optional.empty();
     }
 
     public int size() {

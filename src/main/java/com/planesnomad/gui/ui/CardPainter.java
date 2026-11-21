@@ -165,12 +165,15 @@ public final class CardPainter {
         g.setFont(nameFont);
         FontMetrics fm = g.getFontMetrics();
         int titleH = fm.getHeight() + pad / 2;
+        // With symbol pictures the cost is drawn as symbols; otherwise as short text ("1R").
         String cost = card.manaCost() == null ? "" : card.manaCost();
-        int costW = tiny || cost.isEmpty() ? 0 : fm.stringWidth(cost) + pad;
+        boolean symbols = ManaSymbols.available();
+        String shown = symbols ? cost : shortCost(cost);
+        int costW = tiny || shown.isEmpty() ? 0 : SymbolText.width(shown, fm) + pad;
         g.setColor(text);
         drawClipped(g, card.name(), x + pad, y + pad + fm.getAscent(), w - 2 * pad - costW);
         if (costW > 0) {
-            g.drawString(cost, x + w - pad - fm.stringWidth(cost), y + pad + fm.getAscent());
+            SymbolText.draw(g, shown, x + w - pad - SymbolText.width(shown, fm), y + pad + fm.getAscent());
         }
 
         // Art box (placeholder until images exist)
@@ -212,11 +215,11 @@ public final class CardPainter {
             int top = typeY + pad;
             int bottom = y + h - pad - ptH;
             int lineY = top + rfm.getAscent();
-            for (String line : wrap(card.rulesText(), rfm, w - 2 * pad)) {
+            for (String line : SymbolText.wrap(card.rulesText(), rfm, w - 2 * pad)) {
                 if (lineY + rfm.getDescent() > bottom) {
                     break;
                 }
-                g.drawString(line, x + pad, lineY);
+                SymbolText.draw(g, line, x + pad, lineY);
                 lineY += rfm.getHeight();
             }
         }
@@ -227,6 +230,11 @@ public final class CardPainter {
             g.setColor(Theme.DAMAGE);
             g.drawString("-" + card.damage(), x + pad, y + h - pad);
         }
+    }
+
+    /** "{1}{R/G}" -> "1R/G" for when there are no symbol pictures. */
+    static String shortCost(String cost) {
+        return cost == null ? "" : cost.replace("}{", "").replace("{", "").replace("}", "");
     }
 
     private static void drawClipped(Graphics2D g, String s, int x, int baseline, int maxWidth) {

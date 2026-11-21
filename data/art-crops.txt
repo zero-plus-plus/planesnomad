@@ -1,24 +1,58 @@
-# Art crop boxes, used to cut card art out of full card images for small thumbnails
+# Art crop boxes, used to cut card art out of full card pictures for small thumbnails
 # (stack list, graveyard/exile piles). Planesnomad data, not Forge's.
 #
-# Coordinates are pixels of a Scryfall "normal" image (488 x 680); other image sizes are
-# scaled proportionally. One line per set, or per group of identically formatted sets:
+# Coordinates are pixels of a Scryfall "normal" picture (488 x 680); other sizes scale.
 #
-#   SET[,SET...] = left,top,right,bottom    # comment
+#   SET[,SET...] = left,top,right,bottom      one box per set or group of identically
+#                                             formatted sets (Forge set codes and/or Forge's
+#                                             short picture-folder codes, e.g. 2ED and U)
+#   SET@layout[,...] = left,top,right,bottom  a box for one card layout in those sets
+#   *@layout = left,top,right,bottom          a layout box for every set that has a normal box
+#   ALT-ARTS-NO-CROP = SET[,SET...]           in these sets, alternate printings (art index 2+)
+#                                             of non-basic-land cards get no crop: they may be
+#                                             showcase/borderless frames with the art elsewhere
 #
-# Use Forge set codes (e.g. 2ED) and/or Forge's short folder codes (e.g. U).
-# Boxes sit slightly inside the art window, because early frames vary a few pixels card to card.
-# Only add sets that have been checked against real images.
+# Lines can continue with a trailing backslash. Boxes sit slightly inside the art window,
+# because frames vary a few pixels card to card. Only list sets checked against real pictures.
+#
+# Special layouts (planeswalker, saga, split, flip, battle, class, case) get NO crop unless a
+# layout box is listed: their art window is elsewhere. Adventure, double-faced fronts and
+# normal cards use the set's normal box. Not handled yet (no crop): split, flip, battle,
+# class, case.
+#
+# Checked 2026-11-21: per-set sheets of 6 cards for 2ED, TOR, SHM, FUT, KTK; then one random
+# normal card from every set below (a forge picture cache culled to Core, Expansion, Commander,
+# MH1-3, LTR, CMR, CLB). Future Sight "futureshifted" frames: not handled yet.
 
-# --- Old frame (1993-2003) ---
-2ED,U = 64,72,426,348    # Unlimited Edition (white border); checked on 6 cards (2026-11-21)
-TOR,TO = 62,72,426,364   # Torment (black border); checked on 6 cards (2026-11-21)
+# --- Old frame (1993-2003), white and black border; also Time Spiral Timeshifted (TSB) ---
+4ED, 4E, 5ED, 5E, 6ED, 6E, 7ED, 7E, LEA, A, ALL, AL, ARN, AN, APC, AP, ATQ, AQ, LEB, B, \
+    DRK, DK, EXO, EX, FEM, FE, HML, HL, ICE, IA, INV, IN, JUD, JU, LGN, LE, LEG, LG, MIR, MI, \
+    MMQ, MM, NMS, NE, ODY, OD, ONS, ON, PLS, PS, PCY, PY, 3ED, R, SCG, SC, STH, SH, TMP, TE, \
+    TOR, TO, TSB, 2ED, U, UDS, UD, ULG, UL, USG, US, VIS, VI, WTH, WL = 64,72,426,348
 
-# --- Modern frame (2003-2014) ---
-SHM = 44,82,444,376      # Shadowmoor; checked on 6 cards (2026-11-21)
-FUT = 44,82,444,376      # Future Sight; checked on 6 cards (2026-11-21). Its "futureshifted"
-                         # cards have a different, larger art window; this box still falls
-                         # inside it (checked on Graven Cairns).
+# --- 2003-2014 frame (8th Edition to Magic 2014) ---
+10E, 8ED, 8E, 9ED, 9E, ALA, ARB, AVR, BNG, BOK, CFX, CHK, CSP, CS, DGM, DIS, DKA, DST, \
+    DS, EVE, 5DN, FD, FUT, GPT, GP, GTC, ISD, JOU, LRW, M10, M11, M12, M13, M14, MBS, MOR, \
+    MRD, MR, NPH, PLC, RAV, ROE, RTR, SHM, SOK, SOM, THS, TSP, WWK, ZEN = 44,82,444,376
 
-# --- Current frame (2014 on, "M15" frame) ---
-KTK = 40,80,448,378      # Khans of Tarkir; checked on 6 cards (2026-11-21)
+# --- Current frame (Magic 2015 on) ---
+40K, AER, AFC, AFR, AKH, BFZ, BIG, BLB, BLC, BRC, BRO, C14, C15, C16, C17, C18, C19, C20, \
+    C21, CLB, CM2, CMA, CMR, DMC, DMU, DOM, DRC, DSC, DSK, DTK, ELD, EMN, FDN, FIC, FIN, FRF, \
+    GRN, HOU, IKO, KHC, KHM, KLD, KTK, LCI, LTC, LTR, M15, M19, M20, M21, MH1, MH2, MH3, MIC, \
+    MID, MKC, MKM, MOC, MOM, NCC, NEC, NEO, OGW, ONC, ONE, ORI, OTC, OTJ, PIP, RIX, RNA, SCD, \
+    SNC, SOI, SPE, STX, TDC, TDM, THB, VOC, VOW, WAR, WOC, WOE, XLN, ZNC, ZNR = 40,80,448,378
+
+# Showcase frames exist from Throne of Eldraine (2019-10-04) on.
+ALT-ARTS-NO-CROP = \
+    40K, AFC, AFR, BIG, BLB, BLC, BRC, BRO, C20, C21, CLB, CMR, DMC, DMU, DRC, DSC, DSK, ELD, \
+    FDN, FIC, FIN, IKO, KHC, KHM, LCI, LTC, LTR, M21, MH2, MH3, MIC, MID, MKC, MKM, MOC, MOM, \
+    NCC, NEC, NEO, ONC, ONE, OTC, OTJ, PIP, SCD, SNC, SPE, STX, TDC, TDM, THB, VOC, VOW, WOC, \
+    WOE, ZNC, ZNR
+
+# --- Special layouts ---
+# Planeswalkers: art fills the top, under the title. Same placement in the 2003-2014 and current
+# frames; checked on 24 planeswalkers from 20 sets (ALA 2008 to FDN 2024). Old frames have none.
+*@planeswalker = 40,80,448,300
+
+# Sagas: art fills the right half. Checked on 10 sagas (DOM, DMU) only.
+DOM@saga, DMU@saga = 256,84,444,590

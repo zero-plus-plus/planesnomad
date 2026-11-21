@@ -174,7 +174,9 @@ public final class CardImages {
                     if (img != null) {
                         // The crop box comes from the card's printing (its set). In a flat folder
                         // the file's printing isn't certain, but the lookup was for this printing.
-                        ArtCrops.Box box = crops.find(card.setCode(), keyFolder(card)).orElse(null);
+                        boolean basicLand = card.typeLine() != null && card.typeLine().contains("Basic");
+                        ArtCrops.Box box = crops.find(card.setCode(), keyFolder(card), card.layout(),
+                            card.artIndex(), basicLand).orElse(null);
                         loaded = new Loaded(img, box);
                         break;
                     }

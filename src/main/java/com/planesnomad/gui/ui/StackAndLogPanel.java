@@ -182,10 +182,13 @@ public final class StackAndLogPanel extends JPanel {
             boolean atBottom = bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - Theme.px(20);
             for (int i = logLinesShown; i < lines.size(); i++) {
                 LogLine line = lines.get(i);
+                SimpleAttributeSet style = line.turnHeader() ? headerStyle() : lineStyle();
+                if (doc.getLength() > 0) {
+                    doc.insertString(doc.getLength(), "\n", style);
+                }
                 int start = doc.getLength();
-                doc.insertString(start, (start == 0 ? "" : "\n") + line.text(), line.turnHeader() ? headerStyle() : lineStyle());
-                doc.setParagraphAttributes(doc.getLength() - line.text().length(), line.text().length(),
-                    line.turnHeader() ? headerStyle() : lineStyle(), false);
+                insertWithSymbols(doc, line.text(), style, logText.getFont());
+                doc.setParagraphAttributes(start, doc.getLength() - start, style, false);
             }
             logLinesShown = lines.size();
             if (atBottom) {
@@ -216,18 +219,44 @@ public final class StackAndLogPanel extends JPanel {
 
     /** Read-only text that wraps at exactly the given width (Swing's HTML widths are not exact pixels). */
     private static JComponent wrapped(String text, Font font, java.awt.Color color, int width) {
-        javax.swing.JTextArea area = new javax.swing.JTextArea(text);
-        area.setLineWrap(true);
-        area.setWrapStyleWord(true);
-        area.setEditable(false);
-        area.setFocusable(false);
-        area.setOpaque(false);
-        area.setFont(font);
-        area.setForeground(color);
-        area.setBorder(null);
-        area.setSize(width, Short.MAX_VALUE);          // lets the text area compute its wrapped height
-        area.setPreferredSize(new Dimension(width, area.getPreferredSize().height));
-        return area;
+        JTextPane pane = new JTextPane();
+        pane.setEditable(false);
+        pane.setFocusable(false);
+        pane.setOpaque(false);
+        pane.setFont(font);
+        pane.setForeground(color);
+        pane.setBorder(null);
+        pane.setMargin(new java.awt.Insets(0, 0, 0, 0));
+        SimpleAttributeSet style = new SimpleAttributeSet();
+        StyleConstants.setForeground(style, color);
+        try {
+            insertWithSymbols(pane.getStyledDocument(), text, style, font);
+        } catch (BadLocationException e) {
+            throw new IllegalStateException(e);
+        }
+        pane.setSize(width, Short.MAX_VALUE);          // lets the pane compute its wrapped height
+        pane.setPreferredSize(new Dimension(width, pane.getPreferredSize().height));
+        return pane;
+    }
+
+    /** Appends text, drawing {R}-style symbols as pictures when available (text form otherwise). */
+    static void insertWithSymbols(StyledDocument doc, String text, javax.swing.text.AttributeSet style, Font font)
+            throws BadLocationException {
+        java.util.regex.Matcher m = ManaSymbols.TOKEN.matcher(text);
+        int size = Math.max(8, (int) Math.round(font.getSize() * 1.05));
+        int last = 0;
+        while (m.find()) {
+            java.awt.image.BufferedImage img = ManaSymbols.get(m.group(1), size);
+            if (img == null) {
+                continue;                     // no picture: leave the text form in place
+            }
+            doc.insertString(doc.getLength(), text.substring(last, m.start()), style);
+            SimpleAttributeSet icon = new SimpleAttributeSet(style);
+            StyleConstants.setIcon(icon, new javax.swing.ImageIcon(img));
+            doc.insertString(doc.getLength(), m.group(), icon);
+            last = m.end();
+        }
+        doc.insertString(doc.getLength(), text.substring(last), style);
     }
 
     private static JLabel title(String text) {

@@ -1,6 +1,7 @@
 package com.planesnomad.gui.images;
 
 import com.planesnomad.gui.ui.CardPainter;
+import com.planesnomad.gui.ui.ManaSymbols;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -15,10 +16,15 @@ import java.util.List;
  * 1. {@code -Dplanesnomad.cardImages=<folder>[;<folder>...]} if given (list separator is ';' on
  *    Windows, ':' elsewhere), e.g. a test folder or an existing picture collection.
  * 2. Forge's own picture cache, if it exists on this computer.
+ *
+ * Mana/card symbols ({R}, {T}, ...): {@code -Dplanesnomad.symbols=<folder>}, otherwise a
+ * {@code symbols} folder next to a card picture folder (Forge's layout: pics/cards, pics/symbols).
+ * Symbols and card pictures are copyrighted: they are only read from the player's own folders.
  */
 public final class ImageSetup {
 
     public static final String PROPERTY = "planesnomad.cardImages";
+    public static final String SYMBOLS_PROPERTY = "planesnomad.symbols";
 
     private ImageSetup() { }
 
@@ -33,6 +39,7 @@ public final class ImageSetup {
             }
         }
         forgeCache().ifPresent(folders::add);
+        ManaSymbols.setFolder(symbolFolder(folders));
         CardImages images = new CardImages(folders, ArtCrops.load(Path.of("data", "art-crops.txt")));
         CardPainter.setImageSource(new CardPainter.ImageSource() {
             @Override
@@ -46,6 +53,21 @@ public final class ImageSetup {
             }
         });
         return images;
+    }
+
+    /** The symbol folder to use, or null if none is found. */
+    static Path symbolFolder(List<Path> cardFolders) {
+        String configured = System.getProperty(SYMBOLS_PROPERTY);
+        if (configured != null && !configured.isBlank()) {
+            return Path.of(configured.trim());
+        }
+        for (Path cards : cardFolders) {
+            Path parent = cards.toAbsolutePath().normalize().getParent();
+            if (parent != null && Files.isDirectory(parent.resolve("symbols"))) {
+                return parent.resolve("symbols");
+            }
+        }
+        return null;
     }
 
     /** Forge's picture cache, where Forge's own downloader saves card images. */

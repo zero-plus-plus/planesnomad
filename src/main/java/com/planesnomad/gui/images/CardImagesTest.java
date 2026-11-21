@@ -3,6 +3,8 @@ package com.planesnomad.gui.images;
 import com.planesnomad.ForgeEngine;
 import com.planesnomad.gui.model.CardSnapshot;
 import com.planesnomad.gui.ui.CardPainter;
+import com.planesnomad.gui.ui.ManaSymbols;
+import com.planesnomad.gui.ui.SymbolText;
 import forge.card.CardDb;
 import forge.item.PaperCard;
 
@@ -31,7 +33,7 @@ public final class CardImagesTest {
     private static int failures = 0;
 
     public static void main(String[] args) throws Exception {
-        Path pictures = Path.of(args.length > 0 ? args[0] : "../test-files/card-images");
+        Path pictures = Path.of(args.length > 0 ? args[0] : "../test-files/pics/cards");
         CardDb db = ForgeEngine.initialize();
         ArtCrops crops = ArtCrops.load(Path.of("data", "art-crops.txt"));
         CardImages images = new CardImages(List.of(pictures), crops);
@@ -47,7 +49,7 @@ public final class CardImagesTest {
             }
         });
 
-        check("Crop file lists sets (" + crops.size() + " codes)", crops.size() >= 7);
+        check("Crop file lists sets (" + crops.size() + " codes)", crops.size() >= 200);
 
         // Printings whose pictures are in the test folder: {name, set, art index}
         String[][] present = {
@@ -70,6 +72,40 @@ public final class CardImagesTest {
             sheet.add(card);
         }
 
+        // One card per frame era, plus special layouts that have a checked box.
+        String[][] eraAndLayout = {
+            {"Abyssal Specter", "7ED", "1"},            // old frame, white border
+            {"Hive Mind", "M10", "1"},                   // 2003-2014 frame
+            {"Starscape Cleric", "BLB", "1"},            // current frame (2024)
+            {"Vivien Reid", "M19", "1"},                 // planeswalker
+            {"History of Benalia", "DOM", "1"},          // saga
+            {"Swamp", "ELD", "3"},                       // basic land, alternate art, showcase era
+        };
+        for (String[] p : eraAndLayout) {
+            CardSnapshot card = snap(db, p[0], p[1], Integer.parseInt(p[2]));
+            if (card == null) {
+                check("Printing exists: " + p[0] + " (" + p[1] + ")", false);
+                continue;
+            }
+            check(p[0] + " (" + p[1] + ", " + card.layout() + ", art " + card.artIndex() + ") has a picture and an art crop",
+                images.hasImage(card) && images.art(card, 120, 88) != null);
+            sheet.add(card);
+        }
+
+        // Showcase-era alternate printings of non-land cards get no crop (frame may be special).
+        CardSnapshot inti = snap(db, "Inti, Seneschal of the Sun", "LCI", 2);
+        check("Alternate printing in a showcase-era set (Inti, LCI art 2): picture yes, crop no",
+            inti != null && images.hasImage(inti) && images.art(inti, 120, 88) == null);
+
+        // Layouts without a checked box get no crop.
+        check("Split cards get no crop", crops.find("DGM", "DGM", "split", 1, false).isEmpty());
+        check("Sagas outside checked sets get no crop", crops.find("NEO", "NEO", "saga", 1, false).isEmpty());
+        check("Planeswalker box applies only to sets with a checked normal box",
+            crops.find("M19", "M19", "planeswalker", 1, false).isPresent()
+                && crops.find("ZZZ", "ZZZ", "planeswalker", 1, false).isEmpty());
+        check("All three frame eras are covered (old 2ED, 2003-2014 M10, current BLB)",
+            crops.find("2ED", "U").isPresent() && crops.find("M10", "M10").isPresent() && crops.find("BLB", "BLB").isPresent());
+
         // Basic lands with several arts must find the right file (Mountain2, not Mountain1).
         CardSnapshot mountain1 = snap(db, "Mountain", "2ED", 1);
         CardSnapshot mountain2 = snap(db, "Mountain", "2ED", 2);
@@ -82,13 +118,31 @@ public final class CardImagesTest {
             && images.full(shock, 63, 88) == null && images.art(shock, 40, 30) == null);
 
         // A set with pictures but no crop box yet: full picture yes, art crop no.
-        check("Crop boxes only for checked sets (none for 10E)", crops.find("10E", "10E").isEmpty());
+        check("Crop boxes only for checked sets (none for an unknown set code)", crops.find("ZZZ", "ZZZ").isEmpty());
 
         // Hidden cards never get a picture.
         check("Hidden cards have no picture", images.full(CardSnapshot.hidden(1), 63, 88) == null);
 
+        // Symbols: Forge keeps them next to the card pictures (pics/symbols beside pics/cards).
+        Path symbols = pictures.toAbsolutePath().normalize().getParent().resolve("symbols");
+        ManaSymbols.setFolder(symbols);
+        check("Symbol folder found next to the card pictures (" + symbols + ")", ManaSymbols.available());
+        for (String sym : new String[] {"R", "R/G", "G/R", "2/W", "U/P", "B/G/P", "T", "Q", "C", "X", "10", "E", "S"}) {
+            check("Symbol {" + sym + "} has a picture", ManaSymbols.get(sym, 16) != null);
+        }
+        check("Unknown symbol {ZZ} has no picture (text form is drawn)", ManaSymbols.get("ZZ", 16) == null);
+        BufferedImage scratch = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB);
+        Graphics2D sg = scratch.createGraphics();
+        sg.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
+        String rules = "{T}: Add {C}{C}. {2/W}{U/P}: Draw a card, then discard a card unless you pay {R/G}.";
+        boolean fits = SymbolText.wrap(rules, sg.getFontMetrics(), 90).stream()
+            .allMatch(l -> SymbolText.width(l, sg.getFontMetrics()) <= 90 || !l.contains(" "));
+        sg.dispose();
+        check("Text with symbols wraps within its width, symbols never split", fits);
+
         if (args.length > 1) {
             writeSheet(new File(args[1]), sheet, images);
+            writeSymbolSheet(new File(new File(args[1]).getParentFile(), "symbols-sheet.png"), db);
         }
 
         System.out.println();
@@ -107,8 +161,9 @@ public final class CardImagesTest {
             return null;
         }
         return new CardSnapshot(0, pc.getName(), pc.getEdition(), pc.getCollectorNumber(), "", "",
-            "", "", null, null, 0, false, false, false, false, false, false, false, false,
-            pc.getCardImageKey());
+            pc.getRules().getType().toString(), "", null, null, 0, false, false,
+            pc.getRules().getType().isLand(), false, false, false, false, false,
+            pc.getCardImageKey(), pc.getArtIndex(), CardLayouts.of(pc.getRules()));
     }
 
     /** Full card next to its art thumbnail, one row per card. */
@@ -132,6 +187,35 @@ public final class CardImagesTest {
         g.dispose();
         ImageIO.write(img, "png", out);
         System.out.println("Contact sheet: " + out.getAbsolutePath());
+    }
+
+    /** Text-frame cards (no pictures) showing symbols in costs and rules text, at two sizes. */
+    private static void writeSymbolSheet(File out, CardDb db) throws Exception {
+        CardPainter.setImageSource(null);   // force text frames
+        String[] names = {"Boartusk Liege", "Reaper King", "Gitaxian Probe", "Sol Ring", "Fireball", "Kitchen Finks"};
+        int sw = 120, sh = 168, lw = 240, lh = 335, pad = 12;
+        BufferedImage img = new BufferedImage(pad + names.length * (lw + pad), pad * 3 + sh + lh, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = img.createGraphics();
+        g.setColor(new Color(0x15181D));
+        g.fillRect(0, 0, img.getWidth(), img.getHeight());
+        int x = pad;
+        for (String n : names) {
+            PaperCard pc = db.getCard(n);
+            var r = pc.getRules();
+            String colors = r.getColor().toString().replaceAll("[^WUBRG]", "");
+            CardSnapshot c = new CardSnapshot(0, pc.getName(), pc.getEdition(), "", colors,
+                r.getManaCost().toString().equalsIgnoreCase("no cost") ? "" : r.getManaCost().toString(),
+                r.getType().toString(), r.getOracleText().replace("\\n", "\n"),
+                r.getIntPower() >= 0 && r.getType().isCreature() ? r.getIntPower() : null,
+                r.getType().isCreature() ? r.getIntToughness() : null, 0, false, r.getType().isCreature(),
+                r.getType().isLand(), false, false, false, false, false, "", 1, "normal");
+            CardPainter.paint(g, c, x, pad, sw, sh);
+            CardPainter.paint(g, c, x, pad * 2 + sh, lw, lh);
+            x += lw + pad;
+        }
+        g.dispose();
+        ImageIO.write(img, "png", out);
+        System.out.println("Symbol sheet: " + out.getAbsolutePath());
     }
 
     private static void check(String description, boolean ok) {

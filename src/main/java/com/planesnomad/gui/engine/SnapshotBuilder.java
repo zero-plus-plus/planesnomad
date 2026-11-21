@@ -123,7 +123,7 @@ public final class SnapshotBuilder {
             // A relic's engine card is hidden: present it as a relic, with no card picture.
             return new CardSnapshot(c.getId(), c.getName(), "", "", "", "",
                 relicTypeLine(relicInfo.get().kind()), rulesText(c), null, null, 0,
-                false, false, false, false, false, false, false, false, "");
+                false, false, false, false, false, false, false, false, "", 1, "normal");
         }
         return new CardSnapshot(
             c.getId(),
@@ -131,7 +131,7 @@ public final class SnapshotBuilder {
             paper == null ? c.getSetCode() : paper.getEdition(),
             paper == null ? "" : paper.getCollectorNumber(),
             colors(c.getColor()),
-            c.getManaCost() == null || c.isLand() ? "" : shortCost(c.getManaCost().toString()),
+            c.getManaCost() == null || c.isLand() ? "" : braceCost(c.getManaCost().toString()),
             c.getType().toString(),
             rulesText(c),
             creature ? c.getNetPower() : null,
@@ -145,16 +145,18 @@ public final class SnapshotBuilder {
             combat != null && combat.isBlocking(c),
             creature && c.isSick(),
             c.isFaceDown(),
-            imageKey(paper)
+            imageKey(paper),
+            paper instanceof forge.item.PaperCard pc ? pc.getArtIndex() : 1,
+            paper instanceof forge.item.PaperCard pc2 ? com.planesnomad.gui.images.CardLayouts.of(pc2.getRules()) : "normal"
         );
     }
 
-    /** "{1}{U}" or "1 {U}" -> "1U" (until we draw our own mana symbols). */
-    static String shortCost(String cost) {
+    /** The engine's cost text, e.g. "{1}{R/G}"; empty for "no cost". */
+    static String braceCost(String cost) {
         if (cost == null || cost.equalsIgnoreCase("no cost")) {
             return "";
         }
-        return cost.replaceAll("[{}\\s]", "");
+        return cost.trim();
     }
 
     static String relicTypeLine(Kind kind) {
