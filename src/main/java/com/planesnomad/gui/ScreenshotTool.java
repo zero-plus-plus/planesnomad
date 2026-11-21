@@ -63,6 +63,8 @@ public final class ScreenshotTool {
             .orElse(pick(snaps, s -> !s.stack().isEmpty()));
         save(out, "6-stack-cascade", deep);
         saveExpanded(out, "7-stack-details", deep);
+        render(out, "8-column-collapsed", deep, false, 1);
+        render(out, "9-column-wide", deep, true, 2);
         System.out.println("Screenshots written to " + out.getAbsolutePath());
     }
 
@@ -114,14 +116,15 @@ public final class ScreenshotTool {
     }
 
     private static void save(File dir, String name, MatchSnapshot snapshot) throws Exception {
-        render(dir, name, snapshot, false);
+        render(dir, name, snapshot, false, 0);
     }
 
     private static void saveExpanded(File dir, String name, MatchSnapshot snapshot) throws Exception {
-        render(dir, name, snapshot, true);
+        render(dir, name, snapshot, true, 0);
     }
 
-    private static void render(File dir, String name, MatchSnapshot snapshot, boolean stackDetails) throws Exception {
+    /** @param column 0 = default column, 1 = collapsed, 2 = widened to 420 */
+    private static void render(File dir, String name, MatchSnapshot snapshot, boolean stackDetails, int column) throws Exception {
         images.preloadWithDownloads(allCards(snapshot));   // pictures load in the background normally
         for (int[] size : SIZES) {
             BufferedImage img = new BufferedImage(size[0], size[1], BufferedImage.TYPE_INT_RGB);
@@ -134,6 +137,12 @@ public final class ScreenshotTool {
                 if (stackDetails) {
                     view.toggleStackDetails();
                 }
+                if (column == 1) {
+                    view.setStackColumnCollapsed(true);
+                } else if (column == 2) {
+                    view.setStackColumnWidthRef(420);
+                }
+                layoutTree(view);
                 layoutTree(view);
                 layoutTree(view);   // second pass: wrapped text settles its height
                 Graphics2D g = img.createGraphics();

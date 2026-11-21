@@ -73,6 +73,18 @@ public final class StackAndLogPanel extends JPanel {
 
         add(stack, BorderLayout.NORTH);
         add(log, BorderLayout.CENTER);
+        // Re-wrap the stack list when the column is resized.
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            private int lastWidth = -1;
+
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                if (getWidth() != lastWidth) {
+                    lastWidth = getWidth();
+                    showStack(lastStack);
+                }
+            }
+        });
         applyFonts();
         showStack(List.of());
     }
@@ -137,7 +149,9 @@ public final class StackAndLogPanel extends JPanel {
                 BorderFactory.createEmptyBorder(pad / 2, pad, pad / 2, pad))));
         int thumbW = Theme.px(40);
         int thumbH = Theme.px(30);
-        int textWidth = Theme.px(WIDTH) - 2 * pad - Theme.px(4) - 2 * pad - Theme.px(14) - thumbW - pad;
+        // Wrap to the column's actual width (it can be resized); its default width before layout.
+        int columnW = getWidth() > 0 ? getWidth() : Theme.px(WIDTH);
+        int textWidth = Math.max(Theme.px(60), columnW - 2 * pad - Theme.px(4) - 2 * pad - Theme.px(14) - thumbW - pad);
         String note = item.resolving() ? "  (resolving)" : top ? "  (resolves next)" : "";
         JComponent headline = wrapped(item.text() + note, Theme.font(Font.BOLD, 11.5), Theme.TEXT, textWidth);
         // The effect text, a little larger than the log so it reads easily (user request).

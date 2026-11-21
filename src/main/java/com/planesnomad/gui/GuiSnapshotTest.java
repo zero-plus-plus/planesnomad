@@ -127,6 +127,44 @@ public final class GuiSnapshotTest {
             view.update(withoutStack);
             ui[4] = !view.isStackPopupShown() && !view.isStackDetailsShown();
         });
+        // Resizable, collapsible stack & log column.
+        int[] widths = new int[6];
+        boolean[] col = new boolean[3];
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            var view = new com.planesnomad.gui.ui.MatchView(null);
+            view.setSize(1280, 720);
+            view.rescale();
+            view.update(withStack);
+            layoutTree(view);
+            layoutTree(view);
+            widths[0] = view.stackColumnWidth();
+            int boardBefore = boardWidth(view);
+            view.setStackColumnCollapsed(true);
+            layoutTree(view);
+            widths[1] = view.stackColumnWidth();
+            widths[2] = boardWidth(view) - boardBefore;
+            view.toggleStackDetails();                 // Tab while collapsed
+            layoutTree(view);
+            layoutTree(view);
+            col[0] = !view.isStackColumnCollapsed() && view.isStackDetailsShown();
+            view.setStackColumnWidthRef(420);
+            layoutTree(view);
+            layoutTree(view);
+            widths[3] = view.stackColumnWidth();
+            view.setStackColumnCollapsed(true);
+            layoutTree(view);
+            view.setStackColumnCollapsed(false);
+            layoutTree(view);
+            layoutTree(view);
+            widths[4] = view.stackColumnWidth();
+        });
+        check("Stack & log column starts at its default width (" + widths[0] + " px)", Math.abs(widths[0] - 260) <= 8);
+        check("Collapsing hides the column and gives the board the space (+" + widths[2] + " px)",
+            widths[1] == 0 && widths[2] > 200);
+        check("Tab while collapsed opens the column with the stack list", col[0]);
+        check("A set column width is applied (" + widths[3] + " px for 420)", Math.abs(widths[3] - 420) <= 8);
+        check("The width is kept after collapsing and expanding again (" + widths[4] + " px)", Math.abs(widths[4] - 420) <= 8);
+
         check("Stack pop-up is hidden when the stack is empty", ui[0]);
         check("Stack pop-up appears when something is on the stack", ui[1]);
         check("Full stack list in the right column is hidden by default", ui[2]);
@@ -195,6 +233,31 @@ public final class GuiSnapshotTest {
             System.out.println(failures + " GUI SNAPSHOT CHECK(S) FAILED");
             System.exit(1);
         }
+    }
+
+    private static void layoutTree(java.awt.Component c) {
+        if (c instanceof java.awt.Container k) {
+            k.doLayout();
+            for (java.awt.Component ch : k.getComponents()) {
+                layoutTree(ch);
+            }
+        }
+    }
+
+    /** Width of the board area (the layered pane holding the board). */
+    private static int boardWidth(java.awt.Container root) {
+        if (root instanceof com.planesnomad.gui.ui.BoardPanel) {
+            return root.getWidth();
+        }
+        for (java.awt.Component ch : root.getComponents()) {
+            if (ch instanceof java.awt.Container k) {
+                int w = boardWidth(k);
+                if (w >= 0) {
+                    return w;
+                }
+            }
+        }
+        return -1;
     }
 
     private static List<String> names(List<RelicSnapshot> relics) {

@@ -140,6 +140,10 @@ public final class MatchViewerApp {
         settings.add(collapse);
         settings.add(stackPos);
         settings.add(playmats);
+        JCheckBoxMenuItem column = new JCheckBoxMenuItem("Show stack & log column", true);
+        column.addActionListener(e -> view.setStackColumnCollapsed(!column.isSelected()));
+        view.onStackColumnChanged(() -> column.setSelected(!view.isStackColumnCollapsed()));
+        settings.add(column);
         settings.add(downloads);
         settings.addSeparator();
         JMenuItem hint = new JMenuItem("Large card view: point at a card and press Q (Esc closes)");

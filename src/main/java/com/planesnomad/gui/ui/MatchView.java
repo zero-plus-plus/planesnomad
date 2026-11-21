@@ -72,6 +72,20 @@ public final class MatchView extends JPanel {
     private boolean rememberStackPosition;
     private KeyEventDispatcher tabDispatcher;
 
+    // Right column (stack + log): resizable with a divider, collapsible to a thin strip.
+    private final JPanel rightColumn = new JPanel(new BorderLayout());
+    private final javax.swing.JSplitPane split =
+        new javax.swing.JSplitPane(javax.swing.JSplitPane.HORIZONTAL_SPLIT, true);
+    private final JPanel collapsedStrip = new JPanel(new BorderLayout());
+    private final javax.swing.JButton collapseButton = smallButton("»", "Hide the stack & log column");
+    private final javax.swing.JButton expandButton = smallButton("«", "Show the stack & log column");
+    private final JPanel center = new JPanel(new BorderLayout());
+    private boolean columnCollapsed;
+    /** The column's width (reference pixels at 1280x720), kept while collapsed and across resizes. */
+    private int columnWidthRef = 260;
+    private boolean dividerPlaced;
+    private Runnable onColumnChanged = () -> { };
+
     private MatchSnapshot last;
     private int runLives = 3;
 
@@ -103,8 +117,35 @@ public final class MatchView extends JPanel {
         boardLayer.add(board, JLayeredPane.DEFAULT_LAYER);
         boardLayer.add(stackPopup, JLayeredPane.PALETTE_LAYER);
         stackPopup.setVisible(false);
-        add(boardLayer, BorderLayout.CENTER);
-        add(stackAndLog, BorderLayout.EAST);
+        // Right column: a small header with the collapse button, then stack + log.
+        JPanel header = new JPanel(new BorderLayout());
+        header.setBackground(Theme.PANEL);
+        header.add(collapseButton, BorderLayout.EAST);
+        rightColumn.add(header, BorderLayout.NORTH);
+        rightColumn.add(stackAndLog, BorderLayout.CENTER);
+        rightColumn.setMinimumSize(new java.awt.Dimension(Theme.px(160), 0));
+        boardLayer.setMinimumSize(new java.awt.Dimension(Theme.px(320), 0));
+        collapsedStrip.setBackground(Theme.PANEL);
+        collapsedStrip.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, Theme.PANEL_EDGE));
+        collapsedStrip.add(expandButton, BorderLayout.NORTH);
+        split.setLeftComponent(boardLayer);
+        split.setRightComponent(rightColumn);
+        split.setResizeWeight(1.0);          // the board takes extra space; the column keeps its width
+        split.setBorder(null);
+        split.setDividerSize(Math.max(4, Theme.px(5)));
+        split.setBackground(Theme.PANEL_EDGE);
+        split.addPropertyChangeListener(javax.swing.JSplitPane.DIVIDER_LOCATION_PROPERTY, e -> {
+            if (dividerPlaced && !columnCollapsed && split.getWidth() > 0) {
+                int w = split.getWidth() - split.getDividerLocation() - split.getDividerSize();
+                if (w > 0) {
+                    columnWidthRef = (int) Math.round(w / Theme.scale());
+                }
+            }
+        });
+        collapseButton.addActionListener(e -> setStackColumnCollapsed(true));
+        expandButton.addActionListener(e -> setStackColumnCollapsed(false));
+        center.add(split, BorderLayout.CENTER);
+        add(center, BorderLayout.CENTER);
 
         installKeys();
         addComponentListener(new ComponentAdapter() {
@@ -157,9 +198,80 @@ public final class MatchView extends JPanel {
         super.removeNotify();
     }
 
-    /** Right-click on the stack pop-up, or Tab: show/hide the full text list in the right column. */
+    /**
+     * Right-click on the stack pop-up, or Tab: show/hide the full text list in the right column.
+     * If the column is collapsed, it opens with the list shown.
+     */
     public void toggleStackDetails() {
+        if (columnCollapsed) {
+            setStackColumnCollapsed(false);
+            stackAndLog.setStackExpanded(true);
+            return;
+        }
         stackAndLog.setStackExpanded(!stackAndLog.isStackExpanded());
+    }
+
+    /** Hide the stack & log column (a thin strip with a button stays), or show it again. */
+    public void setStackColumnCollapsed(boolean collapse) {
+        if (collapse == columnCollapsed) {
+            return;
+        }
+        columnCollapsed = collapse;
+        center.removeAll();
+        if (collapse) {
+            split.remove(boardLayer);
+            center.add(boardLayer, BorderLayout.CENTER);
+            center.add(collapsedStrip, BorderLayout.EAST);
+        } else {
+            center.add(split, BorderLayout.CENTER);
+            split.setLeftComponent(boardLayer);
+            dividerPlaced = false;   // restore the remembered width on the next layout
+        }
+        center.revalidate();
+        center.repaint();
+        onColumnChanged.run();
+    }
+
+    public boolean isStackColumnCollapsed() {
+        return columnCollapsed;
+    }
+
+    /** Current width of the stack & log column in pixels (0 when collapsed). */
+    public int stackColumnWidth() {
+        return columnCollapsed ? 0 : rightColumn.getWidth();
+    }
+
+    /** Set the column width (e.g. from a saved setting), in reference pixels at 1280x720. */
+    public void setStackColumnWidthRef(int ref) {
+        columnWidthRef = Math.max(160, ref);
+        dividerPlaced = false;
+        revalidate();
+    }
+
+    public void onStackColumnChanged(Runnable r) {
+        onColumnChanged = r == null ? () -> { } : r;
+    }
+
+    @Override
+    public void doLayout() {
+        super.doLayout();
+        if (!columnCollapsed && !dividerPlaced && split.getWidth() > 0) {
+            dividerPlaced = true;
+            int col = Math.min(Theme.px(columnWidthRef), split.getWidth() - Theme.px(320));
+            split.setDividerLocation(Math.max(0, split.getWidth() - col - split.getDividerSize()));
+            split.doLayout();
+        }
+    }
+
+    private static javax.swing.JButton smallButton(String text, String tip) {
+        javax.swing.JButton b = new javax.swing.JButton(text);
+        b.setToolTipText(tip);
+        b.setFocusable(false);
+        b.setBorderPainted(false);
+        b.setContentAreaFilled(false);
+        b.setForeground(Theme.TEXT_DIM);
+        b.setMargin(new java.awt.Insets(0, 4, 0, 4));
+        return b;
     }
 
     public boolean isStackDetailsShown() {
@@ -212,6 +324,10 @@ public final class MatchView extends JPanel {
         pinnedHint.setFont(Theme.font(Font.PLAIN, 11));
         pinnedPreview.setBorder(BorderFactory.createEmptyBorder(Theme.px(6), Theme.px(6), Theme.px(6), Theme.px(6)));
         left.setPreferredSize(new java.awt.Dimension(Theme.px(LEFT_WIDTH), 0));
+        collapseButton.setFont(Theme.font(Font.BOLD, 12));
+        expandButton.setFont(Theme.font(Font.BOLD, 12));
+        split.setDividerSize(Math.max(4, Theme.px(5)));
+        dividerPlaced = false;   // keep the column's width in step with the scale
         if (last != null) {
             topBar.update(last, runLives);
         }
