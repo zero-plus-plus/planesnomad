@@ -56,10 +56,10 @@ public final class PlayerPanel extends JPanel {
         header.add(names, BorderLayout.CENTER);
         header.add(life, BorderLayout.EAST);
 
-        JPanel zones = new JPanel(new GridLayout(2, 2, 0, Theme.px(2)));
+        JPanel zones = new JPanel(new GridLayout(4, 1, 0, Theme.px(2)));
         zones.setOpaque(false);
-        zones.add(library);
         zones.add(hand);
+        zones.add(library);
         zones.add(graveyard);
         zones.add(exile);
 
@@ -103,9 +103,19 @@ public final class PlayerPanel extends JPanel {
         exileCards = p.exile();
         graveyard.setText("Graveyard " + graveyardCards.size());
         exile.setText("Exile " + exileCards.size());
+        // The top card's art (the engine adds new cards at the end of these lists).
+        graveyard.setIcon(topIcon(graveyardCards));
+        exile.setIcon(topIcon(exileCards));
         portrait.initial = p.name().isEmpty() ? "?" : p.name().substring(0, 1);
         portrait.color = enemy ? Theme.ENEMY : Theme.YOU;
         portrait.repaint();
+    }
+
+    private static ArtIcon topIcon(List<CardSnapshot> cards) {
+        if (cards.isEmpty()) {
+            return null;
+        }
+        return new ArtIcon(cards.get(cards.size() - 1), Theme.px(28), Theme.px(20));
     }
 
     private void showList(String title, List<CardSnapshot> cards) {
@@ -133,6 +143,7 @@ public final class PlayerPanel extends JPanel {
         b.setBorderPainted(false);
         b.setFocusPainted(false);
         b.setHorizontalAlignment(SwingConstants.LEFT);
+        b.setIconTextGap(4);
         b.setMargin(new java.awt.Insets(0, 0, 0, 0));
         b.setToolTipText("Click to list the cards");
         return b;

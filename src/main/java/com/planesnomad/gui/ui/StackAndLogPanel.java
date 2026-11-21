@@ -17,6 +17,7 @@ import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import javax.swing.ScrollPaneConstants;
+import javax.swing.SwingConstants;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.Dimension;
@@ -134,12 +135,21 @@ public final class StackAndLogPanel extends JPanel {
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, Theme.px(4), 0, 0, item.byYou() ? Theme.YOU : Theme.ENEMY),
                 BorderFactory.createEmptyBorder(pad / 2, pad, pad / 2, pad))));
-        int textWidth = Theme.px(WIDTH) - 2 * pad - Theme.px(4) - 2 * pad - Theme.px(14);
+        int thumbW = Theme.px(40);
+        int thumbH = Theme.px(30);
+        int textWidth = Theme.px(WIDTH) - 2 * pad - Theme.px(4) - 2 * pad - Theme.px(14) - thumbW - pad;
         String note = item.resolving() ? "  (resolving)" : top ? "  (resolves next)" : "";
         JComponent headline = wrapped(item.text() + note, Theme.font(Font.BOLD, 11), Theme.TEXT, textWidth);
         JComponent detail = wrapped(item.detail(), Theme.font(Font.PLAIN, 11), Theme.TEXT_DIM, textWidth);
-        entry.add(headline, BorderLayout.NORTH);
-        entry.add(detail, BorderLayout.CENTER);
+        JPanel text = new JPanel(new BorderLayout());
+        text.setOpaque(false);
+        text.add(headline, BorderLayout.NORTH);
+        text.add(detail, BorderLayout.CENTER);
+        JLabel thumb = new JLabel(new ArtIcon(item.source(), thumbW, thumbH));
+        thumb.setVerticalAlignment(SwingConstants.TOP);
+        thumb.setBorder(BorderFactory.createEmptyBorder(Theme.px(2), 0, 0, pad));
+        entry.add(thumb, BorderLayout.WEST);
+        entry.add(text, BorderLayout.CENTER);
         entry.setAlignmentX(Component.LEFT_ALIGNMENT);
         if (item.source() != null) {
             MouseAdapter hover = new MouseAdapter() {
@@ -153,7 +163,7 @@ public final class StackAndLogPanel extends JPanel {
                     preview.exit();
                 }
             };
-            for (JComponent c : new JComponent[] {entry, headline, detail}) {
+            for (JComponent c : new JComponent[] {entry, headline, detail, thumb, text}) {
                 c.addMouseListener(hover);
                 c.addMouseMotionListener(hover);
             }

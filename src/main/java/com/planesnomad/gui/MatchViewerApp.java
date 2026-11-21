@@ -2,6 +2,8 @@ package com.planesnomad.gui;
 
 import com.planesnomad.ForgeEngine;
 import com.planesnomad.gui.engine.MatchRunner;
+import com.planesnomad.gui.images.CardImages;
+import com.planesnomad.gui.images.ImageSetup;
 import com.planesnomad.gui.ui.MatchView;
 import com.planesnomad.gui.ui.Theme;
 import com.planesnomad.gui.ui.TopBar;
@@ -23,7 +25,9 @@ import java.awt.Dimension;
  * The bottom player ("you") gets the example relics and consumable.
  *
  * Run from the repository root:
- *   java -cp "target\classes;<classpath>" com.planesnomad.gui.MatchViewerApp
+ *   java -cp "target\classes;<classpath>" com.planesnomad.gui.MatchViewerApp [unlimited]
+ * Card pictures: add -Dplanesnomad.cardImages=<folder> (Forge's picture cache is found by itself).
+ * "unlimited" plays decks built from Unlimited Edition printings (for the test pictures).
  */
 public final class MatchViewerApp {
 
@@ -33,6 +37,8 @@ public final class MatchViewerApp {
     private MatchRunner runner;
     private boolean paused;
     private double speed = 1.0;
+    private boolean unlimitedTest;
+    private CardImages images;
     private boolean revealEnemyHand;
 
     private MatchViewerApp(CardDb db) {
@@ -70,7 +76,12 @@ public final class MatchViewerApp {
 
     public static void main(String[] args) {
         CardDb db = ForgeEngine.initialize();
-        SwingUtilities.invokeLater(() -> new MatchViewerApp(db).show());
+        boolean unlimited = args.length > 0 && args[0].equalsIgnoreCase("unlimited");
+        SwingUtilities.invokeLater(() -> {
+            MatchViewerApp app = new MatchViewerApp(db);
+            app.unlimitedTest = unlimited;
+            app.show();
+        });
     }
 
     private void show() {
@@ -80,6 +91,9 @@ public final class MatchViewerApp {
             // default look and feel is fine
         }
         ToolTipManager.sharedInstance().setInitialDelay(250);
+        images = ImageSetup.create();
+        images.addListener(() -> SwingUtilities.invokeLater(view::repaint));
+        System.out.println("Card picture folders: " + images.folders());
 
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setJMenuBar(menu());
@@ -125,9 +139,10 @@ public final class MatchViewerApp {
     }
 
     private void startMatch() {
-        Match match = TestMatches.redVsBlueWithRelics(db);
+        Match match = unlimitedTest ? TestMatches.unlimitedWithRelics(db) : TestMatches.redVsBlueWithRelics(db);
         runner = new MatchRunner(match, TestMatches.YOU, TestMatches.ENEMY,
-            "Red goblins and burn", "Blue tempo: counters and bounce",
+            unlimitedTest ? "Black-red knights and dragons" : "Red goblins and burn",
+            unlimitedTest ? "Blue-green merfolk and faeries" : "Blue tempo: counters and bounce",
             snapshot -> SwingUtilities.invokeLater(() -> view.update(snapshot)));
         runner.setPaused(paused);
         runner.setSpeed(speed);

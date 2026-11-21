@@ -12,6 +12,8 @@ package com.planesnomad.gui.model;
  * @param toughness        current toughness, or null if not a creature
  * @param attacking        attacking in the current combat
  * @param blocking         blocking in the current combat
+ * @param imageKey         Forge's image key for this printing, e.g. "U/Shivan Dragon.full"
+ *                         (set folder + file name, as in Forge's picture cache); empty if none
  */
 public record CardSnapshot(
     int id,
@@ -32,12 +34,13 @@ public record CardSnapshot(
     boolean attacking,
     boolean blocking,
     boolean summoningSick,
-    boolean faceDown
+    boolean faceDown,
+    String imageKey
 ) {
     /** Placeholder for a card whose face the viewer may not see (e.g. the enemy's hand). */
     public static CardSnapshot hidden(int id) {
         return new CardSnapshot(id, "", "", "", "", "", "", "", null, null, 0,
-            false, false, false, false, false, false, false, true);
+            false, false, false, false, false, false, false, true, "");
     }
 
     public boolean isHidden() {

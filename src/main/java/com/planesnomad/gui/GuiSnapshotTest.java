@@ -128,6 +128,15 @@ public final class GuiSnapshotTest {
         check("Tapped lands are marked", snaps.stream().anyMatch(s -> s.you().battlefield().stream()
             .anyMatch(c -> c.land() && c.tapped())));
         check("Game log grows and starts with turn 1", last.log().size() > 20 && last.log().get(0).turnHeader());
+        check("Cards carry Forge's image key (picture file lookup)",
+            snaps.stream().flatMap(s -> s.you().battlefield().stream())
+                .filter(c -> !c.token()).allMatch(c -> c.imageKey().contains("/")));
+        check("Relic engine cards never appear in graveyard or exile (used consumables stay hidden)",
+            snaps.stream().allMatch(s -> s.you().exile().stream().noneMatch(c -> c.name().equals(RelicTest.CONSUMABLE))));
+        check("Relics on the stack are shown as relics",
+            snaps.stream().flatMap(s -> s.stack().stream()).filter(i -> i.source() != null
+                && (i.source().name().equals(RelicTest.ACTIVATED) || i.source().name().equals(RelicTest.CONSUMABLE)))
+                .allMatch(i -> i.relic() != null && !i.source().typeLine().contains("Artifact")));
         check("Cards carry set code and collector number (for image downloads)",
             snaps.stream().flatMap(s -> s.you().battlefield().stream())
                 .filter(c -> !c.token()).allMatch(c -> !c.setCode().isEmpty() && !c.collectorNumber().isEmpty()));

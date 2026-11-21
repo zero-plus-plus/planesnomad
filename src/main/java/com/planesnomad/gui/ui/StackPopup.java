@@ -204,6 +204,11 @@ public final class StackPopup extends JComponent {
             CardSnapshot card = item.source();
             if (card != null) {
                 CardPainter.paint(g, card, x, y, cardW(), cardH());
+                if (item.relic() != null) {
+                    // Relics are shown as relics: their badge sits in the art box.
+                    int d = (int) (cardW() * 0.34);
+                    RelicIcon.paintBadge(g, item.relic(), x + (cardW() - d) / 2, y + (int) (cardH() * 0.14), d);
+                }
             } else {
                 g.setColor(Theme.PANEL);
                 g.fillRoundRect(x, y, cardW(), cardH(), arc, arc);

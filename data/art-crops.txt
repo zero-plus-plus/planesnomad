@@ -1,0 +1,24 @@
+# Art crop boxes, used to cut card art out of full card images for small thumbnails
+# (stack list, graveyard/exile piles). Planesnomad data, not Forge's.
+#
+# Coordinates are pixels of a Scryfall "normal" image (488 x 680); other image sizes are
+# scaled proportionally. One line per set, or per group of identically formatted sets:
+#
+#   SET[,SET...] = left,top,right,bottom    # comment
+#
+# Use Forge set codes (e.g. 2ED) and/or Forge's short folder codes (e.g. U).
+# Boxes sit slightly inside the art window, because early frames vary a few pixels card to card.
+# Only add sets that have been checked against real images.
+
+# --- Old frame (1993-2003) ---
+2ED,U = 64,72,426,348    # Unlimited Edition (white border); checked on 6 cards (2026-11-21)
+TOR,TO = 62,72,426,364   # Torment (black border); checked on 6 cards (2026-11-21)
+
+# --- Modern frame (2003-2014) ---
+SHM = 44,82,444,376      # Shadowmoor; checked on 6 cards (2026-11-21)
+FUT = 44,82,444,376      # Future Sight; checked on 6 cards (2026-11-21). Its "futureshifted"
+                         # cards have a different, larger art window; this box still falls
+                         # inside it (checked on Graven Cairns).
+
+# --- Current frame (2014 on, "M15" frame) ---
+KTK = 40,80,448,378      # Khans of Tarkir; checked on 6 cards (2026-11-21)

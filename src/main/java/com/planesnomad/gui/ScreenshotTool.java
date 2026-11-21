@@ -3,6 +3,8 @@ package com.planesnomad.gui;
 import com.planesnomad.ForgeEngine;
 import com.planesnomad.RelicTest;
 import com.planesnomad.gui.engine.MatchRunner;
+import com.planesnomad.gui.images.CardImages;
+import com.planesnomad.gui.images.ImageSetup;
 import com.planesnomad.gui.model.MatchSnapshot;
 import com.planesnomad.gui.model.RelicSnapshot;
 import com.planesnomad.gui.ui.MatchView;
@@ -25,7 +27,8 @@ import java.util.function.Predicate;
  * Renders the match screen to PNG files without opening a window (works headless), for
  * reviewing the layout. Plays one viewer match without delays and saves a few moments.
  *
- * Usage: java -Djava.awt.headless=true ... com.planesnomad.gui.ScreenshotTool [outputDir]
+ * Usage: java -Djava.awt.headless=true [-Dplanesnomad.cardImages=<folder>] ...
+ *        com.planesnomad.gui.ScreenshotTool [outputDir] [unlimited]
  */
 public final class ScreenshotTool {
 
@@ -34,7 +37,13 @@ public final class ScreenshotTool {
     public static void main(String[] args) throws Exception {
         File out = new File(args.length > 0 ? args[0] : "screenshots");
         out.mkdirs();
+        boolean unlimited = args.length > 1 && args[1].equalsIgnoreCase("unlimited");
         CardDb db = ForgeEngine.initialize();
+        images = ImageSetup.create();
+        System.out.println("Card picture folders: " + images.folders());
+        matchFactory = unlimited ? TestMatches::unlimitedWithRelics : TestMatches::redVsBlueWithRelics;
+        youSubtitle = unlimited ? "Black-red knights and dragons" : "Red goblins and burn";
+        enemySubtitle = unlimited ? "Blue-green merfolk and faeries" : "Blue tempo: counters and bounce";
 
         // Replay (up to 5 matches) until one has two or more items on the stack at once.
         List<MatchSnapshot> snaps = List.of();
@@ -60,12 +69,33 @@ public final class ScreenshotTool {
 
     private static List<MatchSnapshot> playOnce(CardDb db) throws InterruptedException {
         List<MatchSnapshot> snaps = Collections.synchronizedList(new ArrayList<>());
-        MatchRunner runner = new MatchRunner(TestMatches.redVsBlueWithRelics(db),
-            TestMatches.YOU, TestMatches.ENEMY, "Red goblins and burn", "Blue tempo: counters and bounce", snaps::add);
+        MatchRunner runner = new MatchRunner(matchFactory.apply(db),
+            TestMatches.YOU, TestMatches.ENEMY, youSubtitle, enemySubtitle, snaps::add);
         runner.setNoDelay(true);
         runner.start();
         runner.join();
         return snaps;
+    }
+
+    private static CardImages images;
+    private static String youSubtitle;
+    private static String enemySubtitle;
+    private static java.util.function.Function<CardDb, forge.game.Match> matchFactory;
+
+    private static List<com.planesnomad.gui.model.CardSnapshot> allCards(MatchSnapshot s) {
+        List<com.planesnomad.gui.model.CardSnapshot> all = new ArrayList<>();
+        for (var p : List.of(s.you(), s.enemy())) {
+            all.addAll(p.hand());
+            all.addAll(p.battlefield());
+            all.addAll(p.graveyard());
+            all.addAll(p.exile());
+        }
+        s.stack().forEach(i -> {
+            if (i.source() != null) {
+                all.add(i.source());
+            }
+        });
+        return all;
     }
 
     private static boolean anyAttacking(MatchSnapshot s) {
@@ -91,6 +121,7 @@ public final class ScreenshotTool {
     }
 
     private static void render(File dir, String name, MatchSnapshot snapshot, boolean stackDetails) throws Exception {
+        images.preloadNow(allCards(snapshot));   // pictures load in the background normally
         for (int[] size : SIZES) {
             BufferedImage img = new BufferedImage(size[0], size[1], BufferedImage.TYPE_INT_RGB);
             // Swing components must only be touched on the Swing thread.

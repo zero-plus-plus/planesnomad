@@ -83,6 +83,27 @@ public final class RelicIcon extends JComponent {
         return getPreferredSize();
     }
 
+    /** Draws a relic's placeholder badge (no glow) at the given spot, e.g. inside a card frame. */
+    public static void paintBadge(Graphics2D g0, RelicSnapshot relic, int x, int y, int d) {
+        Graphics2D g = (Graphics2D) g0.create();
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        Shape shape = relic.kind() == Kind.CONSUMABLE
+            ? new RoundRectangle2D.Double(x, y, d, d, d / 3.0, d / 3.0)
+            : new Ellipse2D.Double(x, y, d, d);
+        Color base = new Color(relic.color());
+        g.setColor(Theme.blend(base, Color.BLACK, 0.25));
+        g.fill(shape);
+        g.setColor(Theme.blend(base, Color.WHITE, 0.35));
+        g.setStroke(new BasicStroke(Math.max(1f, d / 22f)));
+        g.draw(shape);
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.max(8, (int) (d * 0.47))));
+        FontMetrics fm = g.getFontMetrics();
+        g.setColor(Theme.TEXT);
+        g.drawString(relic.glyph(), x + (d - fm.stringWidth(relic.glyph())) / 2, y + (d + fm.getAscent() - fm.getDescent()) / 2);
+        g.dispose();
+    }
+
     @Override
     protected void paintComponent(Graphics g0) {
         Graphics2D g = (Graphics2D) g0.create();

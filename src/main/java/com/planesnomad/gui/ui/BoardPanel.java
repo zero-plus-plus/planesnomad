@@ -19,11 +19,12 @@ import java.util.List;
 public final class BoardPanel extends JPanel {
 
     // Row weights (share of each half's height)
+    // The three battlefield rows are equal, so every permanent is drawn at the same size.
     private static final double HAND_YOU = 0.28;
     private static final double HAND_ENEMY = 0.14;
     private static final double LANDS = 0.27;
-    private static final double OTHER = 0.15;
-    private static final double CREATURES = 0.36;
+    private static final double OTHER = 0.27;
+    private static final double CREATURES = 0.27;
 
     private final CardRow enemyHand;
     private final CardRow enemyLands;

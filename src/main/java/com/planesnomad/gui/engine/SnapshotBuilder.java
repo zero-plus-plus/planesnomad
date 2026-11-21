@@ -106,7 +106,10 @@ public final class SnapshotBuilder {
     private List<CardSnapshot> cards(Player p, ZoneType zone) {
         List<CardSnapshot> out = new ArrayList<>();
         for (Card c : p.getCardsIn(zone)) {
-            out.add(card(c));
+            // Relic/consumable engine cards stay hidden (e.g. a used consumable goes to exile).
+            if (RelicCatalog.find(c.getName()).isEmpty()) {
+                out.add(card(c));
+            }
         }
         return out;
     }
@@ -115,6 +118,13 @@ public final class SnapshotBuilder {
         Combat combat = c.getGame().getCombat();
         IPaperCard paper = c.getPaperCard();
         boolean creature = c.isCreature();
+        var relicInfo = RelicCatalog.find(c.getName());
+        if (relicInfo.isPresent()) {
+            // A relic's engine card is hidden: present it as a relic, with no card picture.
+            return new CardSnapshot(c.getId(), c.getName(), "", "", "", "",
+                relicTypeLine(relicInfo.get().kind()), rulesText(c), null, null, 0,
+                false, false, false, false, false, false, false, false, "");
+        }
         return new CardSnapshot(
             c.getId(),
             c.getName(),
@@ -134,7 +144,8 @@ public final class SnapshotBuilder {
             combat != null && combat.isAttacking(c),
             combat != null && combat.isBlocking(c),
             creature && c.isSick(),
-            c.isFaceDown()
+            c.isFaceDown(),
+            imageKey(paper)
         );
     }
 
@@ -144,6 +155,26 @@ public final class SnapshotBuilder {
             return "";
         }
         return cost.replaceAll("[{}\\s]", "");
+    }
+
+    static String relicTypeLine(Kind kind) {
+        return switch (kind) {
+            case PASSIVE, TRIGGERED -> "Relic";
+            case ACTIVATED -> "Relic - activated";
+            case CONSUMABLE -> "Consumable";
+        };
+    }
+
+    private static String imageKey(IPaperCard paper) {
+        if (paper instanceof forge.item.PaperCard pc) {
+            try {
+                String key = pc.getCardImageKey();
+                return key == null ? "" : key;
+            } catch (RuntimeException e) {
+                return "";
+            }
+        }
+        return "";
     }
 
     private static String rulesText(Card c) {
@@ -165,6 +196,12 @@ public final class SnapshotBuilder {
     }
 
     // ------------------------------------------------------------------ relics
+
+    private RelicSnapshot relicOf(Card c) {
+        return RelicCatalog.find(c.getName()).map(info -> new RelicSnapshot(c.getName(),
+            info.description() != null ? info.description() : rulesText(c), info.kind(),
+            State.IDLE, info.color(), info.glyph())).orElse(null);
+    }
 
     private List<RelicSnapshot> relics(Player p) {
         List<RelicSnapshot> out = new ArrayList<>();
@@ -245,7 +282,8 @@ public final class SnapshotBuilder {
                 who == you,
                 kind,
                 sa != null && sa == resolvingNow,
-                source == null ? null : card(source)));
+                source == null ? null : card(source),
+                source == null ? null : relicOf(source)));
         }
         return out;
     }

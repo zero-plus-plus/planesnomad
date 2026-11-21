@@ -38,9 +38,10 @@ public record MatchSnapshot(
      * @param byYou  true if the bottom player controls it (drawn on that side's color)
      * @param kind   spell, activated ability or trigger (abilities are shown with their source card)
      * @param resolving true while this item is resolving, e.g. waiting for a player's choice
+     * @param relic  set if the source is a relic or consumable: show it as a relic, not a card
      */
     public record StackItem(String controller, String text, String detail, boolean byYou,
-                            Kind kind, boolean resolving, CardSnapshot source) {
+                            Kind kind, boolean resolving, CardSnapshot source, RelicSnapshot relic) {
         public enum Kind { SPELL, ABILITY, TRIGGER }
     }
 

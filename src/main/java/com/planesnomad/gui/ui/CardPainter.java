@@ -14,7 +14,6 @@ import java.awt.Shape;
 import java.awt.geom.RoundRectangle2D;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.function.Function;
 
 /**
  * Draws a card at any size. Until card images are downloaded this is a text-only frame
@@ -23,13 +22,31 @@ import java.util.function.Function;
  */
 public final class CardPainter {
 
-    /** Supplies a card's picture, or null if none is cached yet. Set once images exist. */
-    private static Function<CardSnapshot, Image> images = card -> null;
+    /** Supplies card pictures already scaled to the requested size, or null if there is none (yet). */
+    public interface ImageSource {
+        Image full(CardSnapshot card, int w, int h);
+
+        Image art(CardSnapshot card, int w, int h);
+    }
+
+    private static final ImageSource NONE = new ImageSource() {
+        @Override
+        public Image full(CardSnapshot card, int w, int h) {
+            return null;
+        }
+
+        @Override
+        public Image art(CardSnapshot card, int w, int h) {
+            return null;
+        }
+    };
+
+    private static ImageSource images = NONE;
 
     private CardPainter() { }
 
-    public static void setImageSource(Function<CardSnapshot, Image> source) {
-        images = source == null ? card -> null : source;
+    public static void setImageSource(ImageSource source) {
+        images = source == null ? NONE : source;
     }
 
     public static void paint(Graphics2D g0, CardSnapshot card, int x, int y, int w, int h) {
@@ -41,14 +58,18 @@ public final class CardPainter {
             if (card.faceDown()) {
                 paintBack(g, x, y, w, h);
             } else {
-                Image picture = images.apply(card);
+                Image picture = images.full(card, w, h);
                 if (picture != null) {
                     Shape clip = round(x, y, w, h);
-                    g.setClip(clip);
-                    g.drawImage(picture, x, y, w, h, null);
-                    g.setClip(null);
+                    Shape oldClip = g.getClip();
+                    g.clip(clip);                       // hide the image's square corners
+                    g.drawImage(picture, x, y, null);
+                    g.setClip(oldClip);
                     g.setColor(new Color(0, 0, 0, 120));
                     g.draw(clip);
+                    if (card.damage() > 0) {
+                        damageBadge(g, card, x, y, w, h);
+                    }
                 } else {
                     paintFrame(g, card, x, y, w, h);
                 }
@@ -56,6 +77,56 @@ public final class CardPainter {
         } finally {
             g.dispose();
         }
+    }
+
+    /**
+     * A small art thumbnail (art crop for the card's set). Without a picture or a crop box for
+     * the set, a colored placeholder with the card's initial.
+     */
+    public static void paintArt(Graphics2D g0, CardSnapshot card, int x, int y, int w, int h) {
+        Graphics2D g = (Graphics2D) g0.create();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            Shape clip = new RoundRectangle2D.Double(x, y, w, h, Math.max(4, h / 4.0), Math.max(4, h / 4.0));
+            g.clip(clip);
+            Image art = card == null ? null : images.art(card, w, h);
+            if (art != null) {
+                g.drawImage(art, x, y, null);
+            } else {
+                Color base = card == null ? Theme.PANEL_EDGE : Theme.cardArt(card.colors(), card.land());
+                g.setColor(base);
+                g.fillRect(x, y, w, h);
+                if (card != null && !card.name().isEmpty()) {
+                    g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.max(8, (int) (h * 0.5))));
+                    FontMetrics fm = g.getFontMetrics();
+                    String initial = card.name().substring(0, 1);
+                    g.setColor(Theme.textOn(base));
+                    g.drawString(initial, x + (w - fm.stringWidth(initial)) / 2, y + (h + fm.getAscent() - fm.getDescent()) / 2);
+                }
+            }
+            g.setClip(null);
+            g.setColor(new Color(0, 0, 0, 140));
+            g.draw(clip);
+        } finally {
+            g.dispose();
+        }
+    }
+
+    /** Damage marked on a creature, drawn over a picture (the text frame shows it in its P/T box). */
+    private static void damageBadge(Graphics2D g, CardSnapshot card, int x, int y, int w, int h) {
+        String text = "-" + card.damage();
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, Math.max(9, (int) (w * 0.14))));
+        FontMetrics fm = g.getFontMetrics();
+        int pad = Math.max(2, w / 30);
+        int bw = fm.stringWidth(text) + 2 * pad;
+        int bh = fm.getHeight();
+        int bx = x + pad;
+        int by = y + h - bh - pad;
+        g.setColor(new Color(0, 0, 0, 170));
+        g.fillRoundRect(bx, by, bw, bh, bh / 2, bh / 2);
+        g.setColor(Theme.DAMAGE);
+        g.drawString(text, bx + pad, by + fm.getAscent());
     }
 
     private static RoundRectangle2D round(int x, int y, int w, int h) {
