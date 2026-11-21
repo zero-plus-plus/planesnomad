@@ -11,7 +11,6 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
-import javax.swing.JTextArea;
 import javax.swing.JTextPane;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.SimpleAttributeSet;
@@ -42,6 +41,8 @@ public final class StackAndLogPanel extends JPanel {
     private int logLinesShown = 0;
     private final JScrollPane logScroll;
     private List<StackItem> lastStack = List.of();
+    private JPanel stackSection;
+    private boolean stackExpanded;
 
     public StackAndLogPanel(CardPreview preview) {
         super(new BorderLayout());
@@ -51,7 +52,9 @@ public final class StackAndLogPanel extends JPanel {
         stackItems.setLayout(new BoxLayout(stackItems, BoxLayout.Y_AXIS));
         stackItems.setOpaque(false);
         JPanel stack = new JPanel(new BorderLayout());
+        stackSection = stack;
         stack.setOpaque(false);
+        stack.setVisible(false);   // shown only when the stack is expanded (right-click / Tab)
         stack.add(stackTitle, BorderLayout.NORTH);
         stack.add(stackItems, BorderLayout.CENTER);
 
@@ -81,6 +84,18 @@ public final class StackAndLogPanel extends JPanel {
         int pad = Theme.px(6);
         logText.setBorder(BorderFactory.createEmptyBorder(0, pad, pad, pad));
         showStack(lastStack);
+    }
+
+    /** Show or hide the full text list of the stack above the log. */
+    public void setStackExpanded(boolean expanded) {
+        stackExpanded = expanded;
+        stackSection.setVisible(expanded);
+        revalidate();
+        repaint();
+    }
+
+    public boolean isStackExpanded() {
+        return stackExpanded;
     }
 
     public void update(MatchSnapshot s) {
@@ -119,19 +134,10 @@ public final class StackAndLogPanel extends JPanel {
             BorderFactory.createCompoundBorder(
                 BorderFactory.createMatteBorder(0, Theme.px(4), 0, 0, item.byYou() ? Theme.YOU : Theme.ENEMY),
                 BorderFactory.createEmptyBorder(pad / 2, pad, pad / 2, pad))));
-        int textWidth = Theme.px(WIDTH - 50);
-        JLabel headline = new JLabel("<html><body style='width: " + textWidth + "px'>" + escape(item.text())
-            + (top ? " <span style='color:#9AA0A8;font-weight:normal'>(resolves next)</span>" : "") + "</body></html>");
-        headline.setFont(Theme.font(Font.BOLD, 11));
-        headline.setForeground(Theme.TEXT);
-        JTextArea detail = new JTextArea(item.detail());
-        detail.setLineWrap(true);
-        detail.setWrapStyleWord(true);
-        detail.setEditable(false);
-        detail.setOpaque(false);
-        detail.setFont(Theme.font(Font.PLAIN, 11));
-        detail.setForeground(Theme.TEXT_DIM);
-        detail.setFocusable(false);
+        int textWidth = Theme.px(WIDTH) - 2 * pad - Theme.px(4) - 2 * pad - Theme.px(14);
+        String note = item.resolving() ? "  (resolving)" : top ? "  (resolves next)" : "";
+        JComponent headline = wrapped(item.text() + note, Theme.font(Font.BOLD, 11), Theme.TEXT, textWidth);
+        JComponent detail = wrapped(item.detail(), Theme.font(Font.PLAIN, 11), Theme.TEXT_DIM, textWidth);
         entry.add(headline, BorderLayout.NORTH);
         entry.add(detail, BorderLayout.CENTER);
         entry.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -198,8 +204,20 @@ public final class StackAndLogPanel extends JPanel {
         return a;
     }
 
-    private static String escape(String s) {
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    /** Read-only text that wraps at exactly the given width (Swing's HTML widths are not exact pixels). */
+    private static JComponent wrapped(String text, Font font, java.awt.Color color, int width) {
+        javax.swing.JTextArea area = new javax.swing.JTextArea(text);
+        area.setLineWrap(true);
+        area.setWrapStyleWord(true);
+        area.setEditable(false);
+        area.setFocusable(false);
+        area.setOpaque(false);
+        area.setFont(font);
+        area.setForeground(color);
+        area.setBorder(null);
+        area.setSize(width, Short.MAX_VALUE);          // lets the text area compute its wrapped height
+        area.setPreferredSize(new Dimension(width, area.getPreferredSize().height));
+        return area;
     }
 
     private static JLabel title(String text) {

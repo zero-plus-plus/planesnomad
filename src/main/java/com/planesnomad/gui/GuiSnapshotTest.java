@@ -88,6 +88,40 @@ public final class GuiSnapshotTest {
         check("Stack shows both players' items", snaps.stream().flatMap(s -> s.stack().stream()).anyMatch(i -> i.byYou())
             && snaps.stream().flatMap(s -> s.stack().stream()).anyMatch(i -> !i.byYou()));
 
+        check("Stack items know whether they are a spell, ability or trigger",
+            snaps.stream().flatMap(s -> s.stack().stream()).allMatch(i -> i.kind() != null));
+        check("Your own triggers appear on the stack (e.g. " + RelicTest.TRIGGERED + ")",
+            snaps.stream().flatMap(s -> s.stack().stream()).anyMatch(i -> i.byYou()
+                && i.kind() == MatchSnapshot.StackItem.Kind.TRIGGER && i.text().contains(RelicTest.TRIGGERED)));
+        long resolvingSeen = snaps.stream().flatMap(s -> s.stack().stream()).filter(MatchSnapshot.StackItem::resolving).count();
+        System.out.println("  (items seen while resolving: " + resolvingSeen + ")");
+
+        // Screen behaviour of the stack pop-up (no window needed).
+        MatchSnapshot withStack = snaps.stream().filter(s -> !s.stack().isEmpty()).findFirst().orElseThrow();
+        MatchSnapshot withoutStack = snaps.stream().filter(s -> s.stack().isEmpty() && s.turn() >= 1).findFirst().orElseThrow();
+        boolean[] ui = new boolean[5];
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            var view = new com.planesnomad.gui.ui.MatchView(null);
+            view.setSize(1280, 720);
+            view.rescale();
+            view.doLayout();
+            view.update(withoutStack);
+            ui[0] = !view.isStackPopupShown();
+            view.update(withStack);
+            ui[1] = view.isStackPopupShown();
+            ui[2] = !view.isStackDetailsShown();
+            view.toggleStackDetails();
+            ui[3] = view.isStackDetailsShown();
+            view.toggleStackDetails();
+            view.update(withoutStack);
+            ui[4] = !view.isStackPopupShown() && !view.isStackDetailsShown();
+        });
+        check("Stack pop-up is hidden when the stack is empty", ui[0]);
+        check("Stack pop-up appears when something is on the stack", ui[1]);
+        check("Full stack list in the right column is hidden by default", ui[2]);
+        check("Right-click / Tab shows the full stack list", ui[3]);
+        check("Pop-up disappears again when the stack empties", ui[4]);
+
         check("Attacking creatures are marked during combat",
             snaps.stream().anyMatch(s -> s.you().battlefield().stream().anyMatch(CardSnapshot::attacking)
                 || s.enemy().battlefield().stream().anyMatch(CardSnapshot::attacking)));

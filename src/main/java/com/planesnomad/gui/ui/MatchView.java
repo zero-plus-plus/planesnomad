@@ -6,11 +6,14 @@ import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
+import javax.swing.JLayeredPane;
 import javax.swing.JPanel;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
 import java.awt.Font;
+import java.awt.KeyEventDispatcher;
+import java.awt.KeyboardFocusManager;
 import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -37,6 +40,9 @@ public final class MatchView extends JPanel {
     /** Default hotkey for the large card view. */
     public static final int LARGE_PREVIEW_KEY = KeyEvent.VK_Q;
 
+    /** Default hotkey for the full stack list (WASD is kept free for future keyboard navigation). */
+    public static final int STACK_DETAILS_KEY = KeyEvent.VK_TAB;
+
     /** Left column width at the reference resolution. */
     private static final int LEFT_WIDTH = 220;
 
@@ -50,6 +56,21 @@ public final class MatchView extends JPanel {
     private final BoardPanel board = new BoardPanel(preview);
     private final StackAndLogPanel stackAndLog = new StackAndLogPanel(preview);
     private final JPanel left = new JPanel(new WeightedColumn());
+    private final StackPopup stackPopup = new StackPopup(preview, this::toggleStackDetails);
+    private final JLayeredPane boardLayer = new JLayeredPane() {
+        @Override
+        public void doLayout() {
+            board.setBounds(0, 0, getWidth(), getHeight());
+            stackPopup.setSize(stackPopup.getPreferredSize());
+            if (stackPopup.movedByUser()) {
+                stackPopup.moveWithin(stackPopup.getX(), stackPopup.getY());   // keep it on screen
+            } else {
+                placeStackOutOfTheWay();   // board size known now (first show, or window resized)
+            }
+        }
+    };
+    private boolean rememberStackPosition;
+    private KeyEventDispatcher tabDispatcher;
 
     private MatchSnapshot last;
     private int runLives = 3;
@@ -79,7 +100,10 @@ public final class MatchView extends JPanel {
 
         add(topBar, BorderLayout.NORTH);
         add(left, BorderLayout.WEST);
-        add(board, BorderLayout.CENTER);
+        boardLayer.add(board, JLayeredPane.DEFAULT_LAYER);
+        boardLayer.add(stackPopup, JLayeredPane.PALETTE_LAYER);
+        stackPopup.setVisible(false);
+        add(boardLayer, BorderLayout.CENTER);
         add(stackAndLog, BorderLayout.EAST);
 
         installKeys();
@@ -110,6 +134,74 @@ public final class MatchView extends JPanel {
         });
     }
 
+    /** Tab (default key) shows or hides the full stack list; works even though Swing normally uses Tab for focus. */
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        tabDispatcher = e -> {
+            if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == STACK_DETAILS_KEY && e.getModifiersEx() == 0
+                && SwingUtilities.getWindowAncestor(this) == KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow()) {
+                toggleStackDetails();
+                return true;
+            }
+            return false;
+        };
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(tabDispatcher);
+    }
+
+    @Override
+    public void removeNotify() {
+        if (tabDispatcher != null) {
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(tabDispatcher);
+        }
+        super.removeNotify();
+    }
+
+    /** Right-click on the stack pop-up, or Tab: show/hide the full text list in the right column. */
+    public void toggleStackDetails() {
+        stackAndLog.setStackExpanded(!stackAndLog.isStackExpanded());
+    }
+
+    public boolean isStackDetailsShown() {
+        return stackAndLog.isStackExpanded();
+    }
+
+    /** Setting: keep the stack pop-up where the player dragged it (off = pop up out of the way each time). */
+    public void setRememberStackPosition(boolean remember) {
+        rememberStackPosition = remember;
+        if (!remember) {
+            stackPopup.forgetUserPosition();
+        }
+    }
+
+    public boolean isStackPopupShown() {
+        return stackPopup.isVisible();
+    }
+
+    private void updateStackPopup(MatchSnapshot s) {
+        boolean show = !s.stack().isEmpty();
+        boolean appearing = show && !stackPopup.isVisible();
+        stackPopup.setItems(s.stack());
+        if (appearing && !rememberStackPosition) {
+            stackPopup.forgetUserPosition();   // pop up out of the way each time
+        }
+        if (show && !stackPopup.movedByUser()) {
+            placeStackOutOfTheWay();           // also re-centers as the cascade grows
+        }
+        stackPopup.setVisible(show);
+        boardLayer.repaint();
+    }
+
+    /** Default spot: the right edge of the board, centered on the middle line. */
+    private void placeStackOutOfTheWay() {
+        java.awt.Dimension d = stackPopup.getPreferredSize();
+        stackPopup.setSize(d);
+        int margin = Theme.px(10);
+        int x = boardLayer.getWidth() - d.width - margin;
+        int y = (boardLayer.getHeight() - d.height) / 2;
+        stackPopup.moveWithin(x, y);
+    }
+
     /** Follow the window size: fonts and fixed sizes scale with it. */
     public void rescale() {
         Theme.updateScale(getWidth(), getHeight());
@@ -135,6 +227,7 @@ public final class MatchView extends JPanel {
         youPanel.update(s.you());
         board.update(s);
         stackAndLog.update(s);
+        updateStackPopup(s);
         repaint();
     }
 

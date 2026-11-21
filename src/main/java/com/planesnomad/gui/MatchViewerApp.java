@@ -106,13 +106,20 @@ public final class MatchViewerApp {
             view.revalidate();
         });
 
+        JCheckBoxMenuItem stackPos = new JCheckBoxMenuItem("Stack pop-up remembers where I move it", false);
+        stackPos.addActionListener(e -> view.setRememberStackPosition(stackPos.isSelected()));
+
         settings.add(hover);
         settings.add(pinned);
         settings.add(collapse);
+        settings.add(stackPos);
         settings.addSeparator();
         JMenuItem hint = new JMenuItem("Large card view: point at a card and press Q (Esc closes)");
         hint.setEnabled(false);
         settings.add(hint);
+        JMenuItem stackHint = new JMenuItem("Stack details: right-click the stack pop-up or press Tab");
+        stackHint.setEnabled(false);
+        settings.add(stackHint);
         bar.add(settings);
         return bar;
     }

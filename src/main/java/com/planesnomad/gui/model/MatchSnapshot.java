@@ -36,8 +36,13 @@ public record MatchSnapshot(
      * @param text   headline, e.g. "Blue AI casts Counterspell"
      * @param detail what it will do, e.g. "Counter Goblin Raider."
      * @param byYou  true if the bottom player controls it (drawn on that side's color)
+     * @param kind   spell, activated ability or trigger (abilities are shown with their source card)
+     * @param resolving true while this item is resolving, e.g. waiting for a player's choice
      */
-    public record StackItem(String controller, String text, String detail, boolean byYou, CardSnapshot source) { }
+    public record StackItem(String controller, String text, String detail, boolean byYou,
+                            Kind kind, boolean resolving, CardSnapshot source) {
+        public enum Kind { SPELL, ABILITY, TRIGGER }
+    }
 
     /** One game log line. Turn headers are shown differently. */
     public record LogLine(String text, boolean turnHeader) { }

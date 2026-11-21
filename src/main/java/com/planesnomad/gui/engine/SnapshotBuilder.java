@@ -219,12 +219,20 @@ public final class SnapshotBuilder {
 
     private List<StackItem> stack() {
         List<StackItem> out = new ArrayList<>();
+        // The engine resolves an item while it is still on the stack (it is removed afterwards),
+        // so an item waiting for a choice (e.g. Duress) stays visible; mark it as resolving.
+        SpellAbility resolvingNow = game.getStack().isResolving() ? game.getStack().getResolvingAbility() : null;
         for (SpellAbilityStackInstance si : game.getStack()) {
             SpellAbility sa = si.getSpellAbility();
             Card source = si.getSourceCard();
             Player who = si.getActivatingPlayer();
-            String verb = sa != null && sa.isSpell() ? "casts"
-                : sa != null && sa.isTrigger() ? "triggers" : "activates";
+            StackItem.Kind kind = sa != null && sa.isSpell() ? StackItem.Kind.SPELL
+                : sa != null && sa.isTrigger() ? StackItem.Kind.TRIGGER : StackItem.Kind.ABILITY;
+            String verb = switch (kind) {
+                case SPELL -> "casts";
+                case TRIGGER -> "triggers";
+                case ABILITY -> "activates";
+            };
             String name = source == null ? "?" : source.getName();
             String detail = si.getStackDescription();
             if (detail != null && detail.startsWith(name)) {
@@ -233,8 +241,10 @@ public final class SnapshotBuilder {
             out.add(new StackItem(
                 who == null ? "" : who.getName(),
                 (who == null ? "" : who.getName() + " ") + verb + " " + name,
-                detail == null ? "" : detail.trim(),
+                detail == null ? "" : CARD_ID.matcher(detail).replaceAll("").trim(),
                 who == you,
+                kind,
+                sa != null && sa == resolvingNow,
                 source == null ? null : card(source)));
         }
         return out;
