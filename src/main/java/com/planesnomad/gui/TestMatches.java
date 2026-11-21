@@ -58,6 +58,63 @@ public final class TestMatches {
         return new Match(new GameRules(GameType.Constructed), List.of(red, blue), "Planesnomad viewer (Unlimited)");
     }
 
+    /**
+     * Decks mixing four frame eras, built from the printings in the test picture folders:
+     * Torment (old frame), Shadowmoor and Future Sight (2003-2014 frame), Khans of Tarkir
+     * (current frame). Swamps have no test picture on purpose (they show the text frame).
+     */
+    public static Match mixedErasWithRelics(CardDb db) {
+        Deck you = new Deck("Mixed eras - Red/Green");
+        add(you, db, "Monastery Swiftspear", "KTK", 3, 1);
+        add(you, db, "Heir of the Wilds", "KTK", 3, 1);
+        add(you, db, "Hooded Hydra", "KTK", 1, 1);
+        add(you, db, "Meandering Towershell", "KTK", 1, 1);
+        add(you, db, "Boartusk Liege", "SHM", 2, 1);
+        add(you, db, "Boggart Ram-Gang", "SHM", 3, 1);
+        add(you, db, "Tattermunge Maniac", "SHM", 3, 1);
+        add(you, db, "Bogardan Lancer", "FUT", 3, 1);
+        add(you, db, "Baru, Fist of Krosa", "FUT", 1, 1);
+        add(you, db, "Grim Lavamancer", "TOR", 2, 1);
+        add(you, db, "Rugged Highlands", "KTK", 4, 1);
+        add(you, db, "Forest", "KTK", 4, 2);
+        add(you, db, "Forest", "SHM", 3, 1);
+        add(you, db, "Mountain", "SHM", 7, 1);
+
+        Deck enemy = new Deck("Mixed eras - Blue/Black");
+        add(enemy, db, "Cursecatcher", "SHM", 3, 1);
+        add(enemy, db, "Hollowsage", "SHM", 2, 1);
+        add(enemy, db, "Sygg, River Cutthroat", "SHM", 1, 1);
+        add(enemy, db, "Faerie Swarm", "SHM", 1, 1);
+        add(enemy, db, "Cloudseeder", "FUT", 2, 1);
+        add(enemy, db, "Augur of Skulls", "FUT", 2, 1);
+        add(enemy, db, "Whip-Spine Drake", "FUT", 2, 1);
+        add(enemy, db, "Carrion Rats", "TOR", 2, 1);
+        add(enemy, db, "Mesmeric Fiend", "TOR", 2, 1);
+        add(enemy, db, "Chainer's Edict", "TOR", 3, 1);
+        add(enemy, db, "Faceless Butcher", "TOR", 2, 1);
+        add(enemy, db, "Dismal Backwater", "KTK", 4, 1);
+        add(enemy, db, "Island", "KTK", 7, 1);
+        add(enemy, db, "Swamp", "M10", 7, 1);
+
+        RegisteredPlayer red = new RegisteredPlayer(you);
+        RegisteredPlayer blue = new RegisteredPlayer(enemy);
+        red.setPlayer(PlanesnomadGame.createAi(YOU));
+        blue.setPlayer(PlanesnomadGame.createAi(ENEMY));
+        red.addExtraCardsInCommandZone(List.of(
+            db.getCard(RelicTest.PASSIVE), db.getCard(RelicTest.TRIGGERED),
+            db.getCard(RelicTest.ACTIVATED), db.getCard(RelicTest.CONSUMABLE)));
+        return new Match(new GameRules(GameType.Constructed), List.of(red, blue), "Planesnomad viewer (mixed eras)");
+    }
+
+    /** Adds an exact printing (art index matters for basic lands). */
+    private static void add(Deck deck, CardDb db, String name, String set, int count, int artIndex) {
+        PaperCard card = db.getCard(name, set, artIndex);
+        if (card == null) {
+            throw new IllegalArgumentException("No printing: " + name + " (" + set + ", art " + artIndex + ")");
+        }
+        deck.getMain().add(card, count);
+    }
+
     /** Adds an exact Unlimited Edition printing (art index matters for basic lands). */
     private static void add(Deck deck, CardDb db, String name, int count, int artIndex) {
         PaperCard card = db.getCard(name, "2ED", artIndex);

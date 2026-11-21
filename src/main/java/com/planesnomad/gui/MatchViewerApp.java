@@ -25,9 +25,10 @@ import java.awt.Dimension;
  * The bottom player ("you") gets the example relics and consumable.
  *
  * Run from the repository root:
- *   java -cp "target\classes;<classpath>" com.planesnomad.gui.MatchViewerApp [unlimited]
+ *   java -cp "target\classes;<classpath>" com.planesnomad.gui.MatchViewerApp [unlimited|mixed]
  * Card pictures: add -Dplanesnomad.cardImages=<folder> (Forge's picture cache is found by itself).
- * "unlimited" plays decks built from Unlimited Edition printings (for the test pictures).
+ * "unlimited" / "mixed" play decks built from printings that match the test pictures
+ * (Unlimited only, or Torment + Shadowmoor + Future Sight + Khans of Tarkir).
  */
 public final class MatchViewerApp {
 
@@ -37,7 +38,7 @@ public final class MatchViewerApp {
     private MatchRunner runner;
     private boolean paused;
     private double speed = 1.0;
-    private boolean unlimitedTest;
+    private String testDecks = "";
     private CardImages images;
     private boolean revealEnemyHand;
 
@@ -76,10 +77,10 @@ public final class MatchViewerApp {
 
     public static void main(String[] args) {
         CardDb db = ForgeEngine.initialize();
-        boolean unlimited = args.length > 0 && args[0].equalsIgnoreCase("unlimited");
+        String which = args.length > 0 ? args[0].toLowerCase() : "";
         SwingUtilities.invokeLater(() -> {
             MatchViewerApp app = new MatchViewerApp(db);
-            app.unlimitedTest = unlimited;
+            app.testDecks = which;
             app.show();
         });
     }
@@ -139,10 +140,13 @@ public final class MatchViewerApp {
     }
 
     private void startMatch() {
-        Match match = unlimitedTest ? TestMatches.unlimitedWithRelics(db) : TestMatches.redVsBlueWithRelics(db);
+        boolean unlimited = testDecks.equals("unlimited");
+        boolean mixed = testDecks.equals("mixed");
+        Match match = mixed ? TestMatches.mixedErasWithRelics(db)
+            : unlimited ? TestMatches.unlimitedWithRelics(db) : TestMatches.redVsBlueWithRelics(db);
         runner = new MatchRunner(match, TestMatches.YOU, TestMatches.ENEMY,
-            unlimitedTest ? "Black-red knights and dragons" : "Red goblins and burn",
-            unlimitedTest ? "Blue-green merfolk and faeries" : "Blue tempo: counters and bounce",
+            mixed ? "Red-green aggro (KTK/SHM/FUT/TOR)" : unlimited ? "Black-red knights and dragons" : "Red goblins and burn",
+            mixed ? "Blue-black tempo (SHM/FUT/TOR/KTK)" : unlimited ? "Blue-green merfolk and faeries" : "Blue tempo: counters and bounce",
             snapshot -> SwingUtilities.invokeLater(() -> view.update(snapshot)));
         runner.setPaused(paused);
         runner.setSpeed(speed);

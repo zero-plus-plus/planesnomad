@@ -70,7 +70,13 @@ public final class GuiSnapshotTest {
         check("Activated relic is IDLE when it can't be paid for (e.g. early turns)", lensIdle);
         if (countLensUses(last) > 0) {
             check("Activated relic shows USED (greyed out) after use", lensUsed);
-            check("USED is followed by READY again on a later turn", usedThenReadyLater(snaps));
+            // The once-per-turn limit resets each turn: a used relic must not still be greyed
+            // out at the start of a turn (untap/upkeep), whatever happens later in the match.
+            check("USED resets at the start of the next turn (never USED in untap/upkeep)",
+                snaps.stream().filter(s -> s.phase().startsWith("Untap") || s.phase().startsWith("Upkeep"))
+                    .noneMatch(s -> state(s, RelicTest.ACTIVATED) == State.USED));
+            check("USED is followed by READY again on a later turn (when the match goes on)",
+                usedThenReadyLater(snaps));
         }
 
         boolean flaskEverReady = snaps.stream().anyMatch(s -> state(s, RelicTest.CONSUMABLE) == State.READY);
@@ -174,7 +180,12 @@ public final class GuiSnapshotTest {
         return s.log().stream().filter(l -> l.text().startsWith(TestMatches.YOU + " activated " + RelicTest.ACTIVATED)).count();
     }
 
+    /**
+     * True if, after the first time the relic shows USED, it later shows READY; or if the match
+     * ended before the player had another chance (no later turn of theirs with the relic idle).
+     */
     private static boolean usedThenReadyLater(List<MatchSnapshot> snaps) {
+        int lastTurn = snaps.get(snaps.size() - 1).turn();
         int usedTurn = -1;
         for (MatchSnapshot s : snaps) {
             State st = state(s, RelicTest.ACTIVATED);
@@ -184,7 +195,8 @@ public final class GuiSnapshotTest {
                 return true;
             }
         }
-        return usedTurn < 0;
+        // Never used, or used so late that no later turn of "you" came (turns alternate).
+        return usedTurn < 0 || lastTurn <= usedTurn + 1;
     }
 
     private static void check(String description, boolean ok) {

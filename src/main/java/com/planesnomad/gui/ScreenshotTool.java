@@ -28,7 +28,7 @@ import java.util.function.Predicate;
  * reviewing the layout. Plays one viewer match without delays and saves a few moments.
  *
  * Usage: java -Djava.awt.headless=true [-Dplanesnomad.cardImages=<folder>] ...
- *        com.planesnomad.gui.ScreenshotTool [outputDir] [unlimited]
+ *        com.planesnomad.gui.ScreenshotTool [outputDir] [unlimited|mixed]
  */
 public final class ScreenshotTool {
 
@@ -37,13 +37,18 @@ public final class ScreenshotTool {
     public static void main(String[] args) throws Exception {
         File out = new File(args.length > 0 ? args[0] : "screenshots");
         out.mkdirs();
-        boolean unlimited = args.length > 1 && args[1].equalsIgnoreCase("unlimited");
+        String which = args.length > 1 ? args[1].toLowerCase() : "";
+        boolean unlimited = which.equals("unlimited");
+        boolean mixed = which.equals("mixed");
         CardDb db = ForgeEngine.initialize();
         images = ImageSetup.create();
         System.out.println("Card picture folders: " + images.folders());
-        matchFactory = unlimited ? TestMatches::unlimitedWithRelics : TestMatches::redVsBlueWithRelics;
-        youSubtitle = unlimited ? "Black-red knights and dragons" : "Red goblins and burn";
-        enemySubtitle = unlimited ? "Blue-green merfolk and faeries" : "Blue tempo: counters and bounce";
+        matchFactory = mixed ? TestMatches::mixedErasWithRelics
+            : unlimited ? TestMatches::unlimitedWithRelics : TestMatches::redVsBlueWithRelics;
+        youSubtitle = mixed ? "Red-green aggro (KTK/SHM/FUT/TOR)"
+            : unlimited ? "Black-red knights and dragons" : "Red goblins and burn";
+        enemySubtitle = mixed ? "Blue-black tempo (SHM/FUT/TOR/KTK)"
+            : unlimited ? "Blue-green merfolk and faeries" : "Blue tempo: counters and bounce";
 
         // Replay (up to 5 matches) until one has two or more items on the stack at once.
         List<MatchSnapshot> snaps = List.of();
