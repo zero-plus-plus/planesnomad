@@ -9,6 +9,9 @@ import java.util.List;
  *                  placeholders, so the count is still known but not the cards.
  * @param relics    relics and consumables, already translated from command-zone cards
  * @param subtitle  short description shown under the name (enemy theme, for now the deck name)
+ * @param portrait  card whose art is the portrait, or null (placeholder)
+ * @param playmat   card whose art is this player's half of the table, or null (fallback)
+ * @param featured  "guaranteed" cards shown in the enemy's effects bar
  */
 public record PlayerSnapshot(
     String name,
@@ -22,5 +25,8 @@ public record PlayerSnapshot(
     List<CardSnapshot> exile,
     List<RelicSnapshot> relics,
     boolean activeTurn,
-    boolean lost
+    boolean lost,
+    CardSnapshot portrait,
+    CardSnapshot playmat,
+    List<CardSnapshot> featured
 ) { }

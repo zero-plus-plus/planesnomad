@@ -145,7 +145,25 @@ public final class StackAndLogPanel extends JPanel {
         text.setOpaque(false);
         text.add(headline, BorderLayout.NORTH);
         text.add(detail, BorderLayout.CENTER);
-        JLabel thumb = new JLabel(new ArtIcon(item.source(), thumbW, thumbH));
+        // Relics show their relic badge; cards show their art.
+        javax.swing.Icon thumbIcon = item.relic() == null ? new ArtIcon(item.source(), thumbW, thumbH)
+            : new javax.swing.Icon() {
+                @Override
+                public void paintIcon(Component c, java.awt.Graphics g, int x, int y) {
+                    RelicIcon.paintBadge((java.awt.Graphics2D) g, item.relic(), x + (thumbW - thumbH) / 2, y, thumbH);
+                }
+
+                @Override
+                public int getIconWidth() {
+                    return thumbW;
+                }
+
+                @Override
+                public int getIconHeight() {
+                    return thumbH;
+                }
+            };
+        JLabel thumb = new JLabel(thumbIcon);
         thumb.setVerticalAlignment(SwingConstants.TOP);
         thumb.setBorder(BorderFactory.createEmptyBorder(Theme.px(2), 0, 0, pad));
         entry.add(thumb, BorderLayout.WEST);

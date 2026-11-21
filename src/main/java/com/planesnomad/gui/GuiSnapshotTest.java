@@ -27,8 +27,9 @@ public final class GuiSnapshotTest {
         CardDb db = ForgeEngine.initialize();
 
         List<MatchSnapshot> snaps = Collections.synchronizedList(new ArrayList<>());
+        var looks = TestMatches.looks("");
         MatchRunner runner = new MatchRunner(TestMatches.redVsBlueWithRelics(db),
-            TestMatches.YOU, TestMatches.ENEMY, "you", "enemy", snaps::add);
+            TestMatches.YOU, TestMatches.ENEMY, looks[0], looks[1], snaps::add);
         runner.setNoDelay(true);
         runner.start();
         runner.join();
@@ -58,7 +59,10 @@ public final class GuiSnapshotTest {
         check("All four relics/consumables are in the bar once turn 1 starts",
             names(turnOne.you().relics()).containsAll(List.of(
                 RelicTest.PASSIVE, RelicTest.TRIGGERED, RelicTest.ACTIVATED, RelicTest.CONSUMABLE)));
-        check("Enemy has no relics", snaps.stream().allMatch(s -> s.enemy().relics().isEmpty()));
+        check("Enemy's effects are its own (only " + TestMatches.ENEMY_EFFECT + "), never in your relic bar",
+            snaps.stream().filter(s -> s.turn() >= 1).allMatch(s -> s.enemy().relics().stream().map(RelicSnapshot::name)
+                .toList().equals(List.of(TestMatches.ENEMY_EFFECT))
+                && s.you().relics().stream().noneMatch(r -> r.name().equals(TestMatches.ENEMY_EFFECT))));
 
         check("Passive relic is never READY or USED (no glow, no grey)",
             snaps.stream().allMatch(s -> state(s, RelicTest.PASSIVE) == null || state(s, RelicTest.PASSIVE) == State.IDLE));
@@ -128,6 +132,17 @@ public final class GuiSnapshotTest {
         check("Full stack list in the right column is hidden by default", ui[2]);
         check("Right-click / Tab shows the full stack list", ui[3]);
         check("Pop-up disappears again when the stack empties", ui[4]);
+
+        check("Portrait and playmat cards are set for both players (from the match's looks)",
+            first.you().portrait() != null && first.you().portrait().name().equals(looks[0].portraitCard())
+                && first.enemy().portrait() != null && first.enemy().portrait().name().equals(looks[1].portraitCard())
+                && first.you().playmat() != null && first.enemy().playmat() != null);
+        check("Enemy's guaranteed cards are listed for its effects bar",
+            first.enemy().featured().stream().map(CardSnapshot::name).toList().equals(looks[1].featuredCards()));
+        check("Portrait/playmat/featured cards carry image keys (art crops)",
+            first.enemy().portrait().imageKey().contains("/") && first.you().playmat().imageKey().contains("/"));
+        check("No trigger labels like [Phase: ...] or [Zone Changer: ...] in the log",
+            last.log().stream().noneMatch(l -> l.text().matches(".*\\[[A-Z][A-Za-z ]*: [^\\]]*]\\s*$")));
 
         check("Attacking creatures are marked during combat",
             snaps.stream().anyMatch(s -> s.you().battlefield().stream().anyMatch(CardSnapshot::attacking)

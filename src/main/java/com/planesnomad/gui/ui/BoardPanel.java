@@ -36,6 +36,9 @@ public final class BoardPanel extends JPanel {
     private final CardRow youHand;
 
     private int midlineY;
+    private CardSnapshot youPlaymat;
+    private CardSnapshot enemyPlaymat;
+    private boolean playmatsOn = true;
 
     public BoardPanel(CardPreview preview) {
         super(new WeightedColumn());
@@ -61,7 +64,15 @@ public final class BoardPanel extends JPanel {
         add(youHand, HAND_YOU);
     }
 
+    /** Setting: playmat backgrounds on or off. */
+    public void setPlaymats(boolean on) {
+        playmatsOn = on;
+        repaint();
+    }
+
     public void update(MatchSnapshot s) {
+        youPlaymat = s.you().playmat();
+        enemyPlaymat = s.enemy().playmat();
         fill(s.enemy(), enemyHand, enemyLands, enemyOther, enemyCreatures);
         fill(s.you(), youHand, youLands, youOther, youCreatures);
     }
@@ -94,13 +105,21 @@ public final class BoardPanel extends JPanel {
     protected void paintComponent(Graphics g0) {
         super.paintComponent(g0);
         Graphics2D g = (Graphics2D) g0;
-        g.setColor(Theme.TABLE_ENEMY);
-        g.fillRect(0, 0, getWidth(), midlineY);
+        // Each half: the player's playmat (darkened art), or the plain table color.
+        if (!playmatsOn || !Playmats.paint(g, enemyPlaymat, false, 0, 0, getWidth(), midlineY)) {
+            g.setColor(Theme.TABLE_ENEMY);
+            g.fillRect(0, 0, getWidth(), midlineY);
+        }
+        if (!playmatsOn || !Playmats.paint(g, youPlaymat, true, 0, midlineY, getWidth(), getHeight() - midlineY)) {
+            g.setColor(Theme.TABLE);
+            g.fillRect(0, midlineY, getWidth(), getHeight() - midlineY);
+        }
         g.setColor(Theme.MIDLINE);
         g.setStroke(new BasicStroke(Math.max(1f, Theme.px(1.5))));
         g.drawLine(0, midlineY, getWidth(), midlineY);
         // Faint separator above your hand
-        g.setColor(Theme.blend(Theme.TABLE, java.awt.Color.BLACK, 0.35));
+        // Hands sit on a darker strip (translucent, so the playmat still shows through).
+        g.setColor(new java.awt.Color(0, 0, 0, 110));
         g.fillRect(0, youHand.getY(), getWidth(), youHand.getHeight());
         g.fillRect(0, enemyHand.getY(), getWidth(), enemyHand.getHeight());
     }

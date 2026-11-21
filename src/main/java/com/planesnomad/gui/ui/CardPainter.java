@@ -49,6 +49,11 @@ public final class CardPainter {
         images = source == null ? NONE : source;
     }
 
+    /** The card's art crop scaled to fill w x h, or null if none (yet). */
+    public static Image artImage(CardSnapshot card, int w, int h) {
+        return card == null ? null : images.art(card, w, h);
+    }
+
     public static void paint(Graphics2D g0, CardSnapshot card, int x, int y, int w, int h) {
         Graphics2D g = (Graphics2D) g0.create();
         try {

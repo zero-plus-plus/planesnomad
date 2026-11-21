@@ -4,6 +4,7 @@ import com.planesnomad.gui.model.CardSnapshot;
 import com.planesnomad.gui.model.MatchSnapshot;
 import com.planesnomad.gui.model.MatchSnapshot.LogLine;
 import com.planesnomad.gui.model.MatchSnapshot.StackItem;
+import com.planesnomad.gui.model.PlayerLook;
 import com.planesnomad.gui.model.PlayerSnapshot;
 import com.planesnomad.gui.model.RelicSnapshot;
 import com.planesnomad.gui.model.RelicSnapshot.Kind;
@@ -42,15 +43,67 @@ public final class SnapshotBuilder {
     private final Game game;
     private final Player you;
     private final Player enemy;
-    private final String youSubtitle;
-    private final String enemySubtitle;
+    private final PlayerLook youLook;
+    private final PlayerLook enemyLook;
+    private final CardSnapshot youPortrait;
+    private final CardSnapshot youPlaymat;
+    private final List<CardSnapshot> youFeatured;
+    private final CardSnapshot enemyPortrait;
+    private final CardSnapshot enemyPlaymat;
+    private final List<CardSnapshot> enemyFeatured;
 
-    public SnapshotBuilder(Game game, Player you, Player enemy, String youSubtitle, String enemySubtitle) {
+    public SnapshotBuilder(Game game, Player you, Player enemy, PlayerLook youLook, PlayerLook enemyLook) {
         this.game = game;
         this.you = you;
         this.enemy = enemy;
-        this.youSubtitle = youSubtitle;
-        this.enemySubtitle = enemySubtitle;
+        this.youLook = youLook;
+        this.enemyLook = enemyLook;
+        this.youPortrait = named(youLook.portraitCard());
+        this.youPlaymat = named(youLook.playmatCard());
+        this.youFeatured = named(youLook.featuredCards());
+        this.enemyPortrait = named(enemyLook.portraitCard());
+        this.enemyPlaymat = named(enemyLook.playmatCard());
+        this.enemyFeatured = named(enemyLook.featuredCards());
+    }
+
+    /** A snapshot of a card by name (its default printing), for portraits, playmats, featured cards. */
+    static CardSnapshot named(String name) {
+        if (name == null || name.isBlank() || forge.StaticData.instance() == null) {
+            return null;
+        }
+        forge.item.PaperCard pc = forge.StaticData.instance().getCommonCards().getCard(name);
+        return pc == null ? null : fromPaper(pc);
+    }
+
+    private static List<CardSnapshot> named(List<String> names) {
+        List<CardSnapshot> out = new ArrayList<>();
+        for (String n : names) {
+            CardSnapshot c = named(n);
+            if (c != null) {
+                out.add(c);
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /** A card outside the game (no engine card): built from its printing's rules. */
+    public static CardSnapshot fromPaper(forge.item.PaperCard pc) {
+        var r = pc.getRules();
+        var type = r.getType();
+        String cost = r.getManaCost() == null ? "" : braceCost(r.getManaCost().toString());
+        StringBuilder colors = new StringBuilder();
+        if (r.getColor().hasWhite()) colors.append('W');
+        if (r.getColor().hasBlue()) colors.append('U');
+        if (r.getColor().hasBlack()) colors.append('B');
+        if (r.getColor().hasRed()) colors.append('R');
+        if (r.getColor().hasGreen()) colors.append('G');
+        String oracle = r.getOracleText() == null ? "" : r.getOracleText().replace("\\n", "\n");
+        boolean creature = type.isCreature();
+        return new CardSnapshot(-Math.abs(pc.getName().hashCode()) - 1, pc.getName(), pc.getEdition(),
+            pc.getCollectorNumber(), colors.toString(), type.isLand() ? "" : cost, type.toString(), oracle,
+            creature ? r.getIntPower() : null, creature ? r.getIntToughness() : null, 0,
+            false, creature, type.isLand(), false, false, false, false, false,
+            pc.getCardImageKey(), pc.getArtIndex(), com.planesnomad.gui.images.CardLayouts.of(r));
     }
 
     /**
@@ -72,8 +125,8 @@ public final class SnapshotBuilder {
             ph.getTurn(),
             active == null ? "" : active.getName(),
             phase,
-            player(you, youSubtitle, true),
-            player(enemy, enemySubtitle, revealEnemyHand),
+            player(you, youLook.subtitle(), true, youPortrait, youPlaymat, youFeatured),
+            player(enemy, enemyLook.subtitle(), revealEnemyHand, enemyPortrait, enemyPlaymat, enemyFeatured),
             stack(),
             log(),
             result
@@ -82,7 +135,8 @@ public final class SnapshotBuilder {
 
     // ------------------------------------------------------------------ players
 
-    private PlayerSnapshot player(Player p, String subtitle, boolean handVisible) {
+    private PlayerSnapshot player(Player p, String subtitle, boolean handVisible,
+                                  CardSnapshot portrait, CardSnapshot playmat, List<CardSnapshot> featured) {
         List<CardSnapshot> hand = new ArrayList<>();
         for (Card c : p.getCardsIn(ZoneType.Hand)) {
             hand.add(handVisible ? card(c) : CardSnapshot.hidden(c.getId()));
@@ -99,7 +153,10 @@ public final class SnapshotBuilder {
             cards(p, ZoneType.Exile),
             relics(p),
             p == game.getPhaseHandler().getPlayerTurn(),
-            p.hasLost()
+            p.hasLost(),
+            portrait,
+            playmat,
+            featured
         );
     }
 
@@ -280,7 +337,7 @@ public final class SnapshotBuilder {
             out.add(new StackItem(
                 who == null ? "" : who.getName(),
                 (who == null ? "" : who.getName() + " ") + verb + " " + name,
-                detail == null ? "" : CARD_ID.matcher(detail).replaceAll("").trim(),
+                detail == null ? "" : CARD_ID.matcher(detail).replaceAll("").trim().replaceFirst("^-\\s*", ""),
                 who == you,
                 kind,
                 sa != null && sa == resolvingNow,
@@ -291,6 +348,8 @@ public final class SnapshotBuilder {
     }
 
     private static final java.util.regex.Pattern CARD_ID = java.util.regex.Pattern.compile(" \\(\\d+\\)");
+    /** The engine's label at the end of a trigger's text, e.g. "[Phase: Red AI]", "[Zone Changer: X]". */
+    private static final java.util.regex.Pattern TRIGGER_LABEL = java.util.regex.Pattern.compile("\\[[A-Z][A-Za-z ]*: [^\\]]*]\\s*$");
 
     /**
      * Makes engine log lines readable: drops card id numbers, keeps only the headline of
@@ -305,8 +364,9 @@ public final class SnapshotBuilder {
             return null;
         }
         String first = CARD_ID.matcher(msg.split("\n")[0].trim()).replaceAll("");
-        if (first.contains("[Phase:")) {
-            return null;   // a trigger's own text; the "X triggered Y" line already says it
+        if (TRIGGER_LABEL.matcher(first).find()) {
+            return null;   // a trigger's own text, e.g. "... [Phase: Red AI]" or "... [Zone Changer: X]";
+                           // the "X triggered Y" line already says it
         }
         if (e.type() == GameLogEntryType.STACK_RESOLVE) {
             int dash = first.indexOf(" - ");

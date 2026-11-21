@@ -48,8 +48,8 @@ public final class MatchView extends JPanel {
 
     private final CardPreview preview = new CardPreview();
     private final TopBar topBar;
-    private final PlayerPanel enemyPanel = new PlayerPanel(true);
-    private final PlayerPanel youPanel = new PlayerPanel(false);
+    private final PlayerPanel enemyPanel = new PlayerPanel(true, preview);
+    private final PlayerPanel youPanel = new PlayerPanel(false, preview);
     private final JPanel pinnedPreview = new JPanel(new BorderLayout());
     private final CardPreview.CardCanvas pinnedCanvas = new CardPreview.CardCanvas();
     private final JLabel pinnedHint = new JLabel("Hover a card", JLabel.CENTER);
@@ -241,6 +241,11 @@ public final class MatchView extends JPanel {
     /** Setting: show the preview next to the cursor (on by default). */
     public void setHoverPreview(boolean show) {
         preview.setHoverEnabled(show);
+    }
+
+    /** Setting: playmat backgrounds on each half of the table. */
+    public void setPlaymats(boolean on) {
+        board.setPlaymats(on);
     }
 
     public void setRunLives(int lives) {

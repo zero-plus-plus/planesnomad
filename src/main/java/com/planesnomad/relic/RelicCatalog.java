@@ -28,7 +28,9 @@ public final class RelicCatalog {
         "Ember Charm",        new RelicInfo(Kind.PASSIVE,    0xD9572B, "E", "fire.png", null),
         "Wayfarer's Compass", new RelicInfo(Kind.TRIGGERED,  0x3E8E7E, "C", "compass.png", null),
         "Tinker's Lens",      new RelicInfo(Kind.ACTIVATED,  0x8A6BBE, "L", "magnifying-glass.png", null),
-        "Flask of Embers",    new RelicInfo(Kind.CONSUMABLE, 0xE0782E, "F", "test-tube.png", null)
+        "Flask of Embers",    new RelicInfo(Kind.CONSUMABLE, 0xE0782E, "F", "test-tube.png", null),
+        // Enemy effect (test): a passive shown in the enemy's effects bar.
+        "Undertow Ward",      new RelicInfo(Kind.PASSIVE,    0x3A7BC8, "W", "feather.png", null)
     );
 
     private RelicCatalog() { }

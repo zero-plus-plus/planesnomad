@@ -37,7 +37,15 @@ public final class RelicIcon extends JComponent {
     private final boolean consumableSlot;
 
     /** @param consumableSlot true to draw an empty consumable slot when no relic is set */
+    /** Icon size at the reference resolution (top bar default; smaller in the enemy's effects bar). */
+    private final int size;
+
     public RelicIcon(boolean consumableSlot) {
+        this(consumableSlot, SIZE);
+    }
+
+    public RelicIcon(boolean consumableSlot, int size) {
+        this.size = size;
         this.consumableSlot = consumableSlot;
         setOpaque(false);
     }
@@ -73,7 +81,7 @@ public final class RelicIcon extends JComponent {
 
     @Override
     public Dimension getPreferredSize() {
-        int s = Theme.px(SIZE + 12);   // room for the glow
+        int s = Theme.px(size + size * 12 / 34);   // room for the glow
         return new Dimension(s, s);
     }
 
@@ -119,7 +127,7 @@ public final class RelicIcon extends JComponent {
         Graphics2D g = (Graphics2D) g0.create();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        int d = Theme.px(SIZE);
+        int d = Theme.px(size);
         int x = (getWidth() - d) / 2;
         int y = (getHeight() - d) / 2;
         boolean square = consumableSlot || (relic != null && relic.kind() == Kind.CONSUMABLE);

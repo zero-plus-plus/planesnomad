@@ -124,10 +124,14 @@ public final class MatchViewerApp {
         JCheckBoxMenuItem stackPos = new JCheckBoxMenuItem("Stack pop-up remembers where I move it", false);
         stackPos.addActionListener(e -> view.setRememberStackPosition(stackPos.isSelected()));
 
+        JCheckBoxMenuItem playmats = new JCheckBoxMenuItem("Playmat backgrounds", true);
+        playmats.addActionListener(e -> view.setPlaymats(playmats.isSelected()));
+
         settings.add(hover);
         settings.add(pinned);
         settings.add(collapse);
         settings.add(stackPos);
+        settings.add(playmats);
         settings.addSeparator();
         JMenuItem hint = new JMenuItem("Large card view: point at a card and press Q (Esc closes)");
         hint.setEnabled(false);
@@ -140,13 +144,9 @@ public final class MatchViewerApp {
     }
 
     private void startMatch() {
-        boolean unlimited = testDecks.equals("unlimited");
-        boolean mixed = testDecks.equals("mixed");
-        Match match = mixed ? TestMatches.mixedErasWithRelics(db)
-            : unlimited ? TestMatches.unlimitedWithRelics(db) : TestMatches.redVsBlueWithRelics(db);
-        runner = new MatchRunner(match, TestMatches.YOU, TestMatches.ENEMY,
-            mixed ? "Red-green aggro (KTK/SHM/FUT/TOR)" : unlimited ? "Black-red knights and dragons" : "Red goblins and burn",
-            mixed ? "Blue-black tempo (SHM/FUT/TOR/KTK)" : unlimited ? "Blue-green merfolk and faeries" : "Blue tempo: counters and bounce",
+        Match match = TestMatches.create(testDecks, db);
+        var looks = TestMatches.looks(testDecks);
+        runner = new MatchRunner(match, TestMatches.YOU, TestMatches.ENEMY, looks[0], looks[1],
             snapshot -> SwingUtilities.invokeLater(() -> view.update(snapshot)));
         runner.setPaused(paused);
         runner.setSpeed(speed);

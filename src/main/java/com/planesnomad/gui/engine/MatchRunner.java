@@ -2,6 +2,7 @@ package com.planesnomad.gui.engine;
 
 import com.google.common.eventbus.Subscribe;
 import com.planesnomad.gui.model.MatchSnapshot;
+import com.planesnomad.gui.model.PlayerLook;
 import forge.game.Game;
 import forge.game.Match;
 import forge.game.event.GameEvent;
@@ -36,8 +37,8 @@ public final class MatchRunner {
     private final Match match;
     private final String youName;
     private final String enemyName;
-    private final String youSubtitle;
-    private final String enemySubtitle;
+    private final PlayerLook youLook;
+    private final PlayerLook enemyLook;
     private final Consumer<MatchSnapshot> listener;
 
     private final Object lock = new Object();
@@ -56,14 +57,20 @@ public final class MatchRunner {
      * @param listener receives every new snapshot, on the engine thread; the GUI hops to
      *                 the Swing thread itself
      */
-    public MatchRunner(Match match, String youName, String enemyName, String youSubtitle,
-                       String enemySubtitle, Consumer<MatchSnapshot> listener) {
+    public MatchRunner(Match match, String youName, String enemyName, PlayerLook youLook,
+                       PlayerLook enemyLook, Consumer<MatchSnapshot> listener) {
         this.match = match;
         this.youName = youName;
         this.enemyName = enemyName;
-        this.youSubtitle = youSubtitle;
-        this.enemySubtitle = enemySubtitle;
+        this.youLook = youLook;
+        this.enemyLook = enemyLook;
         this.listener = listener;
+    }
+
+    /** Plain looks (subtitles only), e.g. for tests. */
+    public MatchRunner(Match match, String youName, String enemyName, String youSubtitle,
+                       String enemySubtitle, Consumer<MatchSnapshot> listener) {
+        this(match, youName, enemyName, PlayerLook.plain(youSubtitle), PlayerLook.plain(enemySubtitle), listener);
     }
 
     public void start() {
@@ -74,7 +81,7 @@ public final class MatchRunner {
 
     private void run() {
         game = match.createGame();
-        builder = new SnapshotBuilder(game, player(youName), player(enemyName), youSubtitle, enemySubtitle);
+        builder = new SnapshotBuilder(game, player(youName), player(enemyName), youLook, enemyLook);
         game.subscribeToEvents(this);
         publish();
         match.startGame(game);

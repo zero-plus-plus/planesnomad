@@ -2,6 +2,7 @@ package com.planesnomad.gui;
 
 import com.planesnomad.PlanesnomadGame;
 import com.planesnomad.RelicTest;
+import com.planesnomad.gui.model.PlayerLook;
 import forge.card.CardDb;
 import forge.deck.Deck;
 import forge.item.PaperCard;
@@ -17,6 +18,36 @@ public final class TestMatches {
 
     public static final String YOU = "Red AI";
     public static final String ENEMY = "Blue AI";
+
+    /** Example enemy passive effect, shown in the enemy's effects bar. */
+    public static final String ENEMY_EFFECT = "Undertow Ward";
+
+    /** How each test match presents its two players: {you, enemy}. */
+    public static PlayerLook[] looks(String which) {
+        return switch (which == null ? "" : which) {
+            case "unlimited" -> new PlayerLook[] {
+                new PlayerLook("Black-red knights and dragons", "Black Knight", "Shivan Dragon", List.of()),
+                new PlayerLook("Blue-green merfolk and faeries", "Lord of Atlantis", "Island", List.of("Lord of Atlantis")),
+            };
+            case "mixed" -> new PlayerLook[] {
+                new PlayerLook("Red-green aggro (KTK/SHM/FUT/TOR)", "Grim Lavamancer", "Mountain", List.of()),
+                new PlayerLook("Blue-black tempo (SHM/FUT/TOR/KTK)", "Sygg, River Cutthroat", "Island", List.of("Faceless Butcher")),
+            };
+            default -> new PlayerLook[] {
+                new PlayerLook("Red goblins and burn", "Krenko, Mob Boss", "Mountain", List.of()),
+                new PlayerLook("Blue tempo: counters and bounce", "Lord of Atlantis", "Island", List.of("Counterspell")),
+            };
+        };
+    }
+
+    /** Builds a test match by name: "unlimited", "mixed", or anything else for the standard one. */
+    public static Match create(String which, CardDb db) {
+        return switch (which == null ? "" : which) {
+            case "unlimited" -> unlimitedWithRelics(db);
+            case "mixed" -> mixedErasWithRelics(db);
+            default -> redVsBlueWithRelics(db);
+        };
+    }
 
     private TestMatches() { }
 
@@ -55,6 +86,7 @@ public final class TestMatches {
         red.addExtraCardsInCommandZone(List.of(
             db.getCard(RelicTest.PASSIVE), db.getCard(RelicTest.TRIGGERED),
             db.getCard(RelicTest.ACTIVATED), db.getCard(RelicTest.CONSUMABLE)));
+        blue.addExtraCardsInCommandZone(List.of(db.getCard(ENEMY_EFFECT)));
         return new Match(new GameRules(GameType.Constructed), List.of(red, blue), "Planesnomad viewer (Unlimited)");
     }
 
@@ -103,6 +135,7 @@ public final class TestMatches {
         red.addExtraCardsInCommandZone(List.of(
             db.getCard(RelicTest.PASSIVE), db.getCard(RelicTest.TRIGGERED),
             db.getCard(RelicTest.ACTIVATED), db.getCard(RelicTest.CONSUMABLE)));
+        blue.addExtraCardsInCommandZone(List.of(db.getCard(ENEMY_EFFECT)));
         return new Match(new GameRules(GameType.Constructed), List.of(red, blue), "Planesnomad viewer (mixed eras)");
     }
 
@@ -133,6 +166,7 @@ public final class TestMatches {
         red.addExtraCardsInCommandZone(List.of(
             db.getCard(RelicTest.PASSIVE), db.getCard(RelicTest.TRIGGERED),
             db.getCard(RelicTest.ACTIVATED), db.getCard(RelicTest.CONSUMABLE)));
+        blue.addExtraCardsInCommandZone(List.of(db.getCard(ENEMY_EFFECT)));
         return new Match(new GameRules(GameType.Constructed), List.of(red, blue), "Planesnomad viewer");
     }
 }

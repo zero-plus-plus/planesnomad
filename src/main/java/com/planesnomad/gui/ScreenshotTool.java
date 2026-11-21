@@ -38,17 +38,11 @@ public final class ScreenshotTool {
         File out = new File(args.length > 0 ? args[0] : "screenshots");
         out.mkdirs();
         String which = args.length > 1 ? args[1].toLowerCase() : "";
-        boolean unlimited = which.equals("unlimited");
-        boolean mixed = which.equals("mixed");
         CardDb db = ForgeEngine.initialize();
         images = ImageSetup.create();
         System.out.println("Card picture folders: " + images.folders());
-        matchFactory = mixed ? TestMatches::mixedErasWithRelics
-            : unlimited ? TestMatches::unlimitedWithRelics : TestMatches::redVsBlueWithRelics;
-        youSubtitle = mixed ? "Red-green aggro (KTK/SHM/FUT/TOR)"
-            : unlimited ? "Black-red knights and dragons" : "Red goblins and burn";
-        enemySubtitle = mixed ? "Blue-black tempo (SHM/FUT/TOR/KTK)"
-            : unlimited ? "Blue-green merfolk and faeries" : "Blue tempo: counters and bounce";
+        matchFactory = d -> TestMatches.create(which, d);
+        looks = TestMatches.looks(which);
 
         // Replay (up to 5 matches) until one has two or more items on the stack at once.
         List<MatchSnapshot> snaps = List.of();
@@ -75,7 +69,7 @@ public final class ScreenshotTool {
     private static List<MatchSnapshot> playOnce(CardDb db) throws InterruptedException {
         List<MatchSnapshot> snaps = Collections.synchronizedList(new ArrayList<>());
         MatchRunner runner = new MatchRunner(matchFactory.apply(db),
-            TestMatches.YOU, TestMatches.ENEMY, youSubtitle, enemySubtitle, snaps::add);
+            TestMatches.YOU, TestMatches.ENEMY, looks[0], looks[1], snaps::add);
         runner.setNoDelay(true);
         runner.start();
         runner.join();
@@ -83,13 +77,15 @@ public final class ScreenshotTool {
     }
 
     private static CardImages images;
-    private static String youSubtitle;
-    private static String enemySubtitle;
+    private static com.planesnomad.gui.model.PlayerLook[] looks;
     private static java.util.function.Function<CardDb, forge.game.Match> matchFactory;
 
     private static List<com.planesnomad.gui.model.CardSnapshot> allCards(MatchSnapshot s) {
         List<com.planesnomad.gui.model.CardSnapshot> all = new ArrayList<>();
         for (var p : List.of(s.you(), s.enemy())) {
+            if (p.portrait() != null) all.add(p.portrait());
+            if (p.playmat() != null) all.add(p.playmat());
+            all.addAll(p.featured());
             all.addAll(p.hand());
             all.addAll(p.battlefield());
             all.addAll(p.graveyard());
