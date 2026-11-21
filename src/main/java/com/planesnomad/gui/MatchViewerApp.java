@@ -124,6 +124,14 @@ public final class MatchViewerApp {
         JCheckBoxMenuItem stackPos = new JCheckBoxMenuItem("Stack pop-up remembers where I move it", false);
         stackPos.addActionListener(e -> view.setRememberStackPosition(stackPos.isSelected()));
 
+        JCheckBoxMenuItem downloads = new JCheckBoxMenuItem("Download missing pictures and art crops from Scryfall",
+            images.scryfall() != null && images.scryfall().isEnabled());
+        downloads.addActionListener(e -> {
+            if (images.scryfall() != null) {
+                images.scryfall().setEnabled(downloads.isSelected());
+            }
+        });
+
         JCheckBoxMenuItem playmats = new JCheckBoxMenuItem("Playmat backgrounds", true);
         playmats.addActionListener(e -> view.setPlaymats(playmats.isSelected()));
 
@@ -132,6 +140,7 @@ public final class MatchViewerApp {
         settings.add(collapse);
         settings.add(stackPos);
         settings.add(playmats);
+        settings.add(downloads);
         settings.addSeparator();
         JMenuItem hint = new JMenuItem("Large card view: point at a card and press Q (Esc closes)");
         hint.setEnabled(false);

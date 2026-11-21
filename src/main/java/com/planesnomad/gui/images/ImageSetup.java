@@ -20,11 +20,16 @@ import java.util.List;
  * Mana/card symbols ({R}, {T}, ...): {@code -Dplanesnomad.symbols=<folder>}, otherwise a
  * {@code symbols} folder next to a card picture folder (Forge's layout: pics/cards, pics/symbols).
  * Symbols and card pictures are copyrighted: they are only read from the player's own folders.
+ *
+ * Scryfall downloads (pictures the player doesn't have, and exact art crops) are on by default and
+ * cached in the player's local app data; {@code -Dplanesnomad.downloads=false} turns them off and
+ * {@code -Dplanesnomad.cache=<folder>} moves the cache.
  */
 public final class ImageSetup {
 
     public static final String PROPERTY = "planesnomad.cardImages";
     public static final String SYMBOLS_PROPERTY = "planesnomad.symbols";
+    public static final String DOWNLOADS_PROPERTY = "planesnomad.downloads";
 
     private ImageSetup() { }
 
@@ -42,6 +47,9 @@ public final class ImageSetup {
         ManaSymbols.setFolder(symbolFolder(folders));
         CardImages images = new CardImages(folders, ArtCrops.load(Path.of("data", "art-crops.txt")));
         images.setOtherPrintings(ImageSetup::printingsOf);
+        ScryfallDownloader scryfall = new ScryfallDownloader(ScryfallDownloader.defaultCache(), ImageSetup::scryfallLink);
+        scryfall.setEnabled(!"false".equalsIgnoreCase(System.getProperty(DOWNLOADS_PROPERTY, "true")));
+        images.setScryfall(scryfall);
         CardPainter.setImageSource(new CardPainter.ImageSource() {
             @Override
             public java.awt.Image full(com.planesnomad.gui.model.CardSnapshot card, int w, int h) {
@@ -81,6 +89,33 @@ public final class ImageSetup {
             }
             return List.copyOf(out);
         });
+    }
+
+    /**
+     * The Scryfall link (after {@link ScryfallDownloader#BASE}) for a card's printing, built by
+     * Forge's own ImageUtil with the set's Scryfall code. Null for our own custom cards, tokens,
+     * or anything the engine doesn't know.
+     */
+    public static String scryfallLink(com.planesnomad.gui.model.CardSnapshot card, ScryfallDownloader.Version v) {
+        if (forge.StaticData.instance() == null || card.setCode() == null || card.setCode().isEmpty()) {
+            return null;
+        }
+        var db = forge.StaticData.instance().getCommonCards();
+        forge.item.PaperCard pc = db.getCard(card.name(), card.setCode(), Math.max(1, card.artIndex()));
+        if (pc == null) {
+            pc = db.getCard(card.name(), card.setCode());
+        }
+        if (pc == null || pc.getCollectorNumber() == null || pc.getCollectorNumber().isEmpty()) {
+            return null;
+        }
+        var edition = forge.StaticData.instance().getEditions().get(pc.getEdition());
+        if (edition == null || edition.getType() == forge.card.CardEdition.Type.CUSTOM_SET) {
+            return null;   // our own cards: Scryfall doesn't have them
+        }
+        String scryfallSet = edition.getScryfallCode() != null && !edition.getScryfallCode().isEmpty()
+            ? edition.getScryfallCode() : pc.getEdition();
+        return forge.util.ImageUtil.getScryfallDownloadUrl(pc, "", scryfallSet, "en",
+            v == ScryfallDownloader.Version.ART_CROP);
     }
 
     /** The symbol folder to use, or null if none is found. */

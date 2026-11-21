@@ -70,6 +70,11 @@ public final class CardImages {
      */
     public record Printing(String setCode, String imageKey, int artIndex) { }
 
+    /** Optional Scryfall downloads (null = local folders only). */
+    private ScryfallDownloader scryfall;
+    /** Scryfall art crops by card key; Optional.empty() = looked for and not cached. */
+    private final Map<String, Optional<BufferedImage>> scryfallArt = lru(MAX_ORIGINALS);
+
     /** Other printings of a card by name, in preference order; empty if none are known. */
     private Function<String, List<Printing>> otherPrintings = name -> List.of();
 
@@ -80,6 +85,32 @@ public final class CardImages {
 
     public List<Path> folders() {
         return folders;
+    }
+
+    /**
+     * Use Scryfall for pictures the player doesn't have and for exact art crops (null = off).
+     */
+    public void setScryfall(ScryfallDownloader downloader) {
+        scryfall = downloader;
+    }
+
+    public ScryfallDownloader scryfall() {
+        return scryfall;
+    }
+
+    /** Forget what was looked up for this card, so the next request looks again (after a download). */
+    private void forget(CardSnapshot card) {
+        String key = lookupKey(card);
+        synchronized (originals) {
+            originals.remove(key);
+        }
+        synchronized (scryfallArt) {
+            scryfallArt.remove(key);
+        }
+        synchronized (scaled) {
+            scaled.keySet().removeIf(k -> k.startsWith(key + "|"));
+        }
+        listeners.forEach(Runnable::run);
     }
 
     /** Where to find other printings of a card (by name) when its own printing has no picture. */
@@ -102,8 +133,18 @@ public final class CardImages {
 
     /** The card's art (crop box for its set) scaled to w x h, or null if no picture or no crop box. */
     public Image art(CardSnapshot card, int w, int h) {
+        if (card == null || w <= 0 || h <= 0) {
+            return null;
+        }
+        // 1. Scryfall's own art crop: exact for every frame and layout.
+        BufferedImage exact = scryfallArt(card);
+        if (exact != null) {
+            return scaledCopy(lookupKey(card) + "|sfart|" + w + "x" + h,
+                coverCrop(exact, 0, 0, exact.getWidth(), exact.getHeight(), w, h), w, h);
+        }
+        // 2. Our crop box on the full picture (until the exact crop has been downloaded).
         Loaded loaded = get(card);
-        if (loaded == null || loaded.artBox() == null || w <= 0 || h <= 0) {
+        if (loaded == null || loaded.artBox() == null) {
             return null;
         }
         BufferedImage src = loaded.image();
@@ -112,6 +153,11 @@ public final class CardImages {
         int y1 = (int) Math.round(b.top() * src.getHeight());
         int x2 = (int) Math.round(b.right() * src.getWidth());
         int y2 = (int) Math.round(b.bottom() * src.getHeight());
+        return scaledCopy(lookupKey(card) + "|art|" + w + "x" + h, coverCrop(src, x1, y1, x2, y2, w, h), w, h);
+    }
+
+    /** The part of (x1,y1)-(x2,y2) that fills w x h without distortion (centred). */
+    private static BufferedImage coverCrop(BufferedImage src, int x1, int y1, int x2, int y2, int w, int h) {
         // Fill w x h without distortion: cut the centre of the art box to the target's proportions.
         double target = w / (double) h;
         int bw = x2 - x1;
@@ -125,8 +171,36 @@ public final class CardImages {
             y1 += (bh - nh) / 2;
             bh = nh;
         }
-        BufferedImage crop = src.getSubimage(x1, y1, Math.max(1, bw), Math.max(1, bh));
-        return scaledCopy(lookupKey(card) + "|art|" + w + "x" + h, crop, w, h);
+        return src.getSubimage(x1, y1, Math.max(1, bw), Math.max(1, bh));
+    }
+
+    /** The cached Scryfall art crop for this card, or null (and a background download is queued). */
+    private BufferedImage scryfallArt(CardSnapshot card) {
+        if (scryfall == null || card.isHidden() || card.faceDown() || card.name().isEmpty()) {
+            return null;
+        }
+        String key = lookupKey(card);
+        synchronized (scryfallArt) {
+            Optional<BufferedImage> known = scryfallArt.get(key);
+            if (known != null) {
+                return known.orElse(null);
+            }
+        }
+        BufferedImage img = null;
+        Path file = scryfall.cached(card, ScryfallDownloader.Version.ART_CROP);
+        if (file != null) {
+            try {
+                img = ImageIO.read(file.toFile());
+            } catch (IOException e) {
+                System.err.println("Could not read " + file + ": " + e.getMessage());
+            }
+        } else {
+            scryfall.request(card, ScryfallDownloader.Version.ART_CROP, () -> forget(card));
+        }
+        synchronized (scryfallArt) {
+            scryfallArt.put(key, Optional.ofNullable(img));
+        }
+        return img;
     }
 
     /** True if a picture exists for this card (loads it now, on the calling thread). */
@@ -187,6 +261,9 @@ public final class CardImages {
         }
         Loaded loaded = loadPrinting(card, new Printing(card.setCode(), card.imageKey(), card.artIndex()));
         if (loaded == null) {
+            loaded = loadScryfallPicture(card);
+        }
+        if (loaded == null) {
             for (Printing other : otherPrintings.apply(card.name())) {
                 if (other.imageKey() != null && other.imageKey().equals(card.imageKey())) {
                     continue;
@@ -197,10 +274,61 @@ public final class CardImages {
                 }
             }
         }
+        if (loaded == null && scryfall != null) {
+            // Nothing on this computer: download the exact printing in the background.
+            scryfall.request(card, ScryfallDownloader.Version.NORMAL, () -> forget(card));
+        }
         synchronized (originals) {
             originals.put(key, Optional.ofNullable(loaded));
         }
         return loaded;
+    }
+
+    /** The exact printing's picture from the Scryfall cache, if it was downloaded before. */
+    private Loaded loadScryfallPicture(CardSnapshot card) {
+        if (scryfall == null) {
+            return null;
+        }
+        Path file = scryfall.cached(card, ScryfallDownloader.Version.NORMAL);
+        if (file == null) {
+            return null;
+        }
+        try {
+            BufferedImage img = ImageIO.read(file.toFile());
+            if (img == null) {
+                return null;
+            }
+            boolean basicLand = card.typeLine() != null && card.typeLine().contains("Basic");
+            ArtCrops.Box box = crops.find(card.setCode(), keyFolder(card.imageKey()), card.layout(),
+                card.artIndex(), basicLand).orElse(null);
+            return new Loaded(img, box);
+        } catch (IOException e) {
+            System.err.println("Could not read " + file + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Tests and screenshots: load pictures now, downloading from Scryfall on this thread whatever
+     * isn't on this computer (full pictures and art crops).
+     */
+    public void preloadWithDownloads(Collection<CardSnapshot> cards) {
+        for (CardSnapshot c : cards) {
+            if (scryfall != null && c != null && !c.isHidden() && !c.name().isEmpty()) {
+                if (loadNow(c) == null) {
+                    scryfall.fetchNow(c, ScryfallDownloader.Version.NORMAL);
+                }
+                scryfall.fetchNow(c, ScryfallDownloader.Version.ART_CROP);
+                String key = lookupKey(c);
+                synchronized (originals) {
+                    originals.remove(key);
+                }
+                synchronized (scryfallArt) {
+                    scryfallArt.remove(key);
+                }
+            }
+            loadNow(c);
+        }
     }
 
     /** Loads the picture of one printing of the card, with that printing's crop box. */

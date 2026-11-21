@@ -122,7 +122,7 @@ public final class ScreenshotTool {
     }
 
     private static void render(File dir, String name, MatchSnapshot snapshot, boolean stackDetails) throws Exception {
-        images.preloadNow(allCards(snapshot));   // pictures load in the background normally
+        images.preloadWithDownloads(allCards(snapshot));   // pictures load in the background normally
         for (int[] size : SIZES) {
             BufferedImage img = new BufferedImage(size[0], size[1], BufferedImage.TYPE_INT_RGB);
             // Swing components must only be touched on the Swing thread.

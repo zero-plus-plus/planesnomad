@@ -285,19 +285,30 @@ public final class CardPainter {
             g.drawString(pt, bx + pad, by + pfm.getAscent());
         }
         if (!tiny && h - (typeY - y) > 3 * fm.getHeight()) {
-            // Ability cards hold one short ability, so their text can be larger.
+            // Ability cards hold one ability, so their text starts larger and shrinks until it fits;
+            // the bottom is kept free for the "Ability"/"Trigger" tag drawn there.
             double share = card.ability() ? (large ? 0.075 : 0.095) : (large ? 0.055 : 0.075);
+            int top = typeY + pad;
+            int bottom = y + h - pad - ptH - (card.ability() ? (int) (h * 0.09) : 0);
             Font rulesFont = new Font(Font.SANS_SERIF, Font.PLAIN, Math.max(7, (int) (w * share)));
             g.setFont(rulesFont);
             FontMetrics rfm = g.getFontMetrics();
-            int top = typeY + pad;
-            int bottom = y + h - pad - ptH;
+            List<String> lines = SymbolText.wrap(card.rulesText(), rfm, w - 2 * pad);
+            while (card.ability() && rulesFont.getSize() > 7
+                && lines.size() * rfm.getHeight() > bottom - top) {
+                rulesFont = rulesFont.deriveFont((float) (rulesFont.getSize() - 1));
+                g.setFont(rulesFont);
+                rfm = g.getFontMetrics();
+                lines = SymbolText.wrap(card.rulesText(), rfm, w - 2 * pad);
+            }
             int lineY = top + rfm.getAscent();
-            for (String line : SymbolText.wrap(card.rulesText(), rfm, w - 2 * pad)) {
+            for (int i = 0; i < lines.size(); i++) {
                 if (lineY + rfm.getDescent() > bottom) {
                     break;
                 }
-                SymbolText.draw(g, line, x + pad, lineY);
+                String line = lines.get(i);
+                boolean lastShown = lineY + rfm.getHeight() + rfm.getDescent() > bottom && i < lines.size() - 1;
+                SymbolText.draw(g, lastShown ? line + " …" : line, x + pad, lineY);   // "…": more on hover
                 lineY += rfm.getHeight();
             }
         }
