@@ -31,21 +31,8 @@ public class PlanesnomadGame {
         System.out.println("Island rules: "
             + island.getRules().getMainPart().getOracleText());
 
-        Deck redDeck = new Deck("Planesnomad - Red");
-        Deck blueDeck = new Deck("Planesnomad - Blue");
-
-        addCards(redDeck, database, "Shock", "10E", "232", 4);
-        addCards(redDeck, database, "Lightning Bolt", "M10", "146", 4);
-        addCards(redDeck, database, "Goblin Raider", "10E", "207", 4);
-        addCards(redDeck, database, "Mons's Goblin Raiders", "10E", "211", 4);
-        addBasicLands(redDeck, database, "Mountain", "M10", 12);
-
-
-        addCards(blueDeck, database, "Counterspell", "7ED", "68", 4);
-        addCards(blueDeck, database, "Unsummon", "10E", "117", 4);
-        addCards(blueDeck, database, "Merfolk of the Pearl Trident", "M13", "57", 4);
-        addCards(blueDeck, database, "Coral Merfolk", "10E", "79", 4);
-        addBasicLands(blueDeck, database, "Island", "M10", 12);
+        Deck redDeck = buildRedDeck(database);
+        Deck blueDeck = buildBlueDeck(database);
 
         System.out.println("Red deck: " + redDeck.getMain().countAll() + " cards");
         System.out.println("Blue deck: " + blueDeck.getMain().countAll() + " cards");
@@ -130,7 +117,29 @@ public class PlanesnomadGame {
         }
     }
 
-    private static LobbyPlayerAi createAi(String name) {
+    /** Test deck: red burn and goblins. */
+    public static Deck buildRedDeck(CardDb database) {
+        Deck deck = new Deck("Planesnomad - Red");
+        addCards(deck, database, "Shock", "10E", "232", 4);
+        addCards(deck, database, "Lightning Bolt", "M10", "146", 4);
+        addCards(deck, database, "Goblin Raider", "10E", "207", 4);
+        addCards(deck, database, "Mons's Goblin Raiders", "10E", "211", 4);
+        addBasicLands(deck, database, "Mountain", "M10", 12);
+        return deck;
+    }
+
+    /** Test deck: blue counters, bounce and merfolk. */
+    public static Deck buildBlueDeck(CardDb database) {
+        Deck deck = new Deck("Planesnomad - Blue");
+        addCards(deck, database, "Counterspell", "7ED", "68", 4);
+        addCards(deck, database, "Unsummon", "10E", "117", 4);
+        addCards(deck, database, "Merfolk of the Pearl Trident", "M13", "57", 4);
+        addCards(deck, database, "Coral Merfolk", "10E", "79", 4);
+        addBasicLands(deck, database, "Island", "M10", 12);
+        return deck;
+    }
+
+    public static LobbyPlayerAi createAi(String name) {
         LobbyPlayerAi ai = new LobbyPlayerAi(name, Set.of());
         ai.setAiProfile(ForgeEngine.DEFAULT_AI_PROFILE);
         return ai;

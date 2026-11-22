@@ -1,0 +1,7 @@
+Name:Flask of Embers
+ManaCost:no cost
+Types:Artifact
+# Planesnomad consumable (one use, free, instant speed). Exiles itself after use.
+A:AB$ DealDamage | Cost$ 0 | ActivationZone$ Command | ValidTgts$ Any | NumDmg$ 3 | SubAbility$ Eject | SpellDescription$ CARDNAME deals 3 damage to any target. Exile CARDNAME.
+SVar:Eject:DB$ ChangeZone | Defined$ Self | Origin$ Command | Destination$ Exile
+Oracle:Flask of Embers deals 3 damage to any target. Exile Flask of Embers.

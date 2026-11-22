@@ -1,0 +1,12 @@
+[metadata]
+Code=PNO
+Date=2026-11-21
+Name=Planesnomad Originals
+Type=Custom
+
+[cards]
+1 C Ember Charm
+2 C Wayfarer's Compass
+3 C Tinker's Lens
+4 C Flask of Embers
+5 C Undertow Ward

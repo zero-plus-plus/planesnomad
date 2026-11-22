@@ -1,0 +1,16 @@
+Fallback playmats
+=================
+
+Used as a player's half of the table when no playmat card is set (or its picture is missing).
+Both are paintings in the public domain (the painters died more than 100 years ago); faithful
+photographs of public-domain two-dimensional artworks are not copyrighted in the US.
+
+  fallback-you.jpg    Albert Bierstadt (1830-1902), "Among the Sierra Nevada, California", 1868.
+                      Smithsonian American Art Museum.
+  fallback-enemy.jpg  Thomas Cole (1801-1848), "The Titan's Goblet", 1833.
+                      The Metropolitan Museum of Art.
+
+Both were cropped to a wide band (2.2:1) and reduced to 2560 px wide for the repository:
+  Bierstadt: full width, band centred at 55% of the height (peaks, valley, lake).
+  Cole:      full width, band centred at 37% of the height (the goblet's bowl).
+The full-resolution originals are kept outside the repository.
