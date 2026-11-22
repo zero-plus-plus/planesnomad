@@ -162,10 +162,14 @@ public final class ThemePack {
         if (key.startsWith("icon.history.")) {
             return HISTORY_KINDS.contains(key.substring("icon.history.".length()));
         }
+        if (key.startsWith("icon.phase.")) {
+            return java.util.Set.of("upkeep", "draw", "main1", "combatBegin", "attackers", "blockers", "firstStrike",
+                "damage", "combatEnd", "main2", "end", "cleanup").contains(key.substring("icon.phase.".length()));
+        }
         if (key.equals("icon.collapse") || key.equals("icon.expand")) {
             return true;
         }
-        if (key.equals("popup.padding") || key.equals("popup.sideBorder")
+        if (key.equals("popup.padding") || key.equals("popup.sideBorder") || key.equals("prompt.padding")
             || key.equals("relic.frame.extend") || key.equals("consumable.frame.extend")) {
             return true;
         }

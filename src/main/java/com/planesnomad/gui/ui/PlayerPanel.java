@@ -59,6 +59,17 @@ public final class PlayerPanel extends JPanel {
     private List<CardSnapshot> exileCards = List.of();
     private List<RelicSnapshot> shownEffects = List.of();
     private List<CardSnapshot> shownFeatured = List.of();
+    /** While a person plays: highlight for the portrait (e.g. a legal target), and its click. */
+    private java.util.function.Function<String, Color> portraitMark;
+    private java.util.function.Consumer<String> portraitClick;
+
+    public void setPortraitInteraction(java.util.function.Function<String, Color> mark,
+                                       java.util.function.Consumer<String> click) {
+        portraitMark = mark;
+        portraitClick = click;
+        portrait.repaint();
+    }
+
     /** Latest snapshot of this player, for the portrait's info pop-up. */
     private PlayerSnapshot last;
     private final PlayerInfoPopup info;
@@ -129,7 +140,12 @@ public final class PlayerPanel extends JPanel {
 
     public void update(PlayerSnapshot p) {
         last = p;
-        name.setText(p.name() + (p.activeTurn() ? "  ●" : ""));
+        String nameText = p.name() + (p.activeTurn() ? "  ●" : "");
+        if (!nameText.equals(name.getText())) {
+            name.setText(nameText);
+            name.setPreferredSize(null);   // measure the new text (a short name grew by the turn marker)
+            revalidate();
+        }
         subtitle.setText(p.subtitle() == null ? "" : p.subtitle());
         subtitle.setToolTipText(p.subtitle());
         portrait.card = p.portrait();
@@ -240,6 +256,13 @@ public final class PlayerPanel extends JPanel {
                 public void mouseExited(MouseEvent e) {
                     info.hide();
                 }
+
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    if (javax.swing.SwingUtilities.isLeftMouseButton(e) && portraitClick != null && last != null) {
+                        portraitClick.accept(last.name());
+                    }
+                }
             };
             addMouseListener(hover);
             addMouseMotionListener(hover);
@@ -275,8 +298,9 @@ public final class PlayerPanel extends JPanel {
                 g.setColor(new Color(255, 255, 255, 120));
                 g.drawString(initial, (w - fm.stringWidth(initial)) / 2, (h + fm.getAscent() - fm.getDescent()) / 2);
             }
-            g.setColor(color);
-            g.setStroke(new BasicStroke(Math.max(1.5f, Theme.px(2))));
+            Color mark = portraitMark == null || last == null ? null : portraitMark.apply(last.name());
+            g.setColor(mark != null ? mark : color);
+            g.setStroke(new BasicStroke(Math.max(1.5f, Theme.px(mark != null ? 4 : 2))));
             g.draw(new RoundRectangle2D.Double(1, 1, w - 3, h - 3, arc, arc));
 
             // Life badge (themed element "badge.life", number font)

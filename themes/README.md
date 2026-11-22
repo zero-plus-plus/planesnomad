@@ -73,6 +73,9 @@ popup.text        = #E8E4D8        # text color on it (where text is drawn on th
 | `topbar` | top bar: relics, turn, controls | `tile` or `slice` |
 | `popup` | hover pop-ups (player info, history) | `slice` frame; also `popup.padding` (inner space), `popup.sideBorder` (border in the player's color, default on without a picture) |
 | `inspect` | text panel beside an inspected card | `slice` frame |
+| `choice` | panel in the middle of the board showing cards to decide about (scry: top or bottom; surveil) | `slice` frame |
+| `phases` | the column of phase icons left of the battlefield (enemy's turn on top, yours below; gold ring = stop) | `tile` texture or plain fill |
+| `prompt` | the bar above your hand while you play ("Your turn: play something, or pass [Pass]"), with its buttons | `slice` frame; `prompt.padding` (inner space); the buttons use the `button` elements |
 | `stack` | the stack pop-up on the board | `slice` frame |
 | `badge.life` | life total on the portrait | `slice` or `stretch`; text via `badge.life.text` |
 | `badge.count` | counts on piles and history ("×200") | small `slice` pill |
@@ -93,6 +96,7 @@ All settings are listed with their built-in values in `themes/default/theme.prop
 - `font.body`, `font.heading` (names, titles, bold labels), `font.numbers` (life, counts), `font.scale`
 - `icon.history.<kind>`: a picture replacing a history symbol (square, transparent background). Kinds: cast, ability, trigger, land, attack, block, death, exile, bounce, tokens, damage, gameEnd
 - `icon.collapse`, `icon.expand`: the top bar's arrow buttons
+- `icon.phase.<phase>`: the phase column's icons. Phases: upkeep, draw, main1, combatBegin, attackers, blockers, firstStrike, damage, combatEnd, main2, end, cleanup (firstStrike and cleanup only appear while they happen). Draw them in white or light colors: they are shown dim, gold (stop) or on the player's color (now)
 
 ## Checking a theme without the game window
 
@@ -104,11 +108,15 @@ java -Djava.awt.headless=true -Dplanesnomad.theme=my-theme ... com.planesnomad.g
 
 The viewer can also start in a theme: `-Dplanesnomad.theme=my-theme`.
 
+The phase column's states use the theme colors: `color.you` / `color.enemy` (the phase now),
+`color.accent` (stops), `color.textDim` (other phases).
+
 ## Not themable yet
 
 - Where things are on the screen (layout, sizes of rows and columns)
 - Card pictures themselves (they come from card images), and the frame drawn for cards without a picture (colors only)
-- Swing's own menus, the speed list and the check box in the top bar
+- Swing's own menus (right-click menus, menu bar), dialogs (relic confirmation, "how many"), the speed list
+  and the check box in the top bar - these will be replaced by themed versions
 - Sounds and animations
 
 Ask the programmers if your design needs any of these.

@@ -74,6 +74,30 @@ public final class MatchRunner {
         this(match, youName, enemyName, PlayerLook.plain(youSubtitle), PlayerLook.plain(enemySubtitle), listener);
     }
 
+    private volatile boolean stopped;
+
+    /**
+     * Abandons this match: it ends at its next event, questions to a person are answered with
+     * "pass", and no more snapshots are published.
+     */
+    public void stop() {
+        stopped = true;
+        if (human != null) {
+            human.close();
+        }
+        synchronized (lock) {
+            paused = false;
+            lock.notifyAll();
+        }
+    }
+
+    /** A person plays the bottom player: questions to them get a fresh snapshot first. */
+    private HumanBridge human;
+
+    public void setHumanBridge(HumanBridge bridge) {
+        human = bridge;
+    }
+
     public void start() {
         thread = new Thread(this::run, "planesnomad-match");
         thread.setDaemon(true);
@@ -84,6 +108,9 @@ public final class MatchRunner {
         game = match.createGame();
         builder = new SnapshotBuilder(game, player(youName), player(enemyName), youLook, enemyLook);
         history = builder.recordHistory();
+        if (human != null) {
+            human.setBeforeAsk(this::publish);   // the screen shows the moment the question is about
+        }
         game.subscribeToEvents(this);
         publish();
         match.startGame(game);
@@ -102,6 +129,13 @@ public final class MatchRunner {
     /** Called by the engine's event bus, on the engine thread. */
     @Subscribe
     public void onEvent(GameEvent event) {
+        if (stopped) {
+            // Abandoned (e.g. a new match was started): end this game here, on the engine thread.
+            if (game != null && !game.isGameOver()) {
+                game.setGameOver(forge.game.GameEndReason.Draw);
+            }
+            return;
+        }
         if (history != null) {
             history.record(event);   // every event, also those that aren't pace points (e.g. deaths)
         }
@@ -116,6 +150,41 @@ public final class MatchRunner {
     }
 
     // ------------------------------------------------------------------ pacing and stops
+
+    /**
+     * True for a combat step that is passed without a pause even when it is a stop. The rules are
+     * the engine's (Forge's) and are not changed: beginning of combat and end of combat always
+     * happen and keep their stops; declare blockers and combat damage are skipped by the rules when
+     * no attackers were declared (CR 508.8); declare attackers doesn't pause when the active
+     * player has no creature that could attack.
+     */
+    private static final java.util.Set<forge.game.phase.PhaseType> COMBAT_STEPS = java.util.EnumSet.of(
+        forge.game.phase.PhaseType.COMBAT_BEGIN, forge.game.phase.PhaseType.COMBAT_DECLARE_ATTACKERS,
+        forge.game.phase.PhaseType.COMBAT_DECLARE_BLOCKERS, forge.game.phase.PhaseType.COMBAT_FIRST_STRIKE_DAMAGE,
+        forge.game.phase.PhaseType.COMBAT_DAMAGE, forge.game.phase.PhaseType.COMBAT_END);
+
+    public static boolean combatWithoutAttack(Game game, forge.game.phase.PhaseType phase) {
+        if (game == null || phase == null || !COMBAT_STEPS.contains(phase)) {
+            return false;
+        }
+        try {
+            if (phase == forge.game.phase.PhaseType.COMBAT_BEGIN || phase == forge.game.phase.PhaseType.COMBAT_END) {
+                return false;   // these steps always happen; their stops always hold
+            }
+            if (phase == forge.game.phase.PhaseType.COMBAT_DECLARE_ATTACKERS) {
+                var active = game.getPhaseHandler().getPlayerTurn();
+                var combat = game.getCombat();
+                if (combat != null && !combat.getAttackers().isEmpty()) {
+                    return false;
+                }
+                return active == null || active.getCreaturesInPlay().stream().noneMatch(forge.game.combat.CombatUtil::canAttack);
+            }
+            var combat = game.getCombat();
+            return combat == null || combat.getAttackers().isEmpty();
+        } catch (RuntimeException ex) {
+            return false;
+        }
+    }
 
     /** Phase stops: where play pauses at a phase change. Key: "you:MAIN1", "enemy:END_OF_TURN". */
     private final java.util.Set<String> stops = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -183,9 +252,12 @@ public final class MatchRunner {
         }
         if (e instanceof GameEventTurnPhase tp) {
             boolean yourTurn = tp.playerTurn() != null && tp.playerTurn().getName().equals(youName);
-            return tp.phase() != null && isStop(yourTurn, tp.phase()) ? base : 0;
+            return tp.phase() != null && isStop(yourTurn, tp.phase()) && !combatWithoutAttack(game, tp.phase()) ? base : 0;
         }
-        if (e instanceof GameEventLandPlayed || e instanceof GameEventPlayerDamaged
+        if (e instanceof GameEventLandPlayed) {
+            return 0;   // a land is shown at once; it doesn't use the stack, so there is nothing to wait for
+        }
+        if (e instanceof GameEventPlayerDamaged
             || e instanceof GameEventCardDamaged) {
             return base;
         }
@@ -196,6 +268,9 @@ public final class MatchRunner {
     }
 
     private void publish() {
+        if (stopped) {
+            return;
+        }
         MatchSnapshot snapshot;
         try {
             snapshot = builder.build(revealEnemyHand);
@@ -208,7 +283,7 @@ public final class MatchRunner {
     }
 
     private void pace(long delay) {
-        if (noDelay && !paused) {
+        if (stopped || noDelay && !paused) {
             return;
         }
         long until = System.currentTimeMillis() + delay;

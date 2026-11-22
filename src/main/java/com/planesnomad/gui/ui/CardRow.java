@@ -106,6 +106,16 @@ public final class CardRow extends JComponent {
                 dragFromX = Integer.MIN_VALUE;
                 maybeMenu(e);
             }
+
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e) && interaction != null) {
+                    int i = pileAt(e.getPoint());
+                    if (i >= 0) {
+                        interaction.click(CardRow.this, piles.get(i), e);
+                    }
+                }
+            }
         };
         addMouseListener(mouse);
         addMouseMotionListener(mouse);
@@ -119,6 +129,32 @@ public final class CardRow extends JComponent {
                 getParent().dispatchEvent(SwingUtilities.convertMouseEvent(this, e, getParent()));
             }
         });
+    }
+
+    // ------------------------------------------------------------------ playing (human input)
+
+    /**
+     * While a person plays: which cards to highlight (playable, targetable, chosen) and what a
+     * left-click on a card or pile does. Null when nothing is being asked.
+     */
+    public interface Interaction {
+        /** Highlight color for this card, or null. */
+        Color mark(CardSnapshot card);
+
+        void click(CardRow row, Pile pile, MouseEvent e);
+    }
+
+    private Interaction interaction;
+    private java.util.function.Consumer<MouseEvent> emptyMenu;
+
+    /** Right-click on empty space in this row: e.g. the board's menu. */
+    public void setEmptyMenu(java.util.function.Consumer<MouseEvent> menu) {
+        emptyMenu = menu;
+    }
+
+    public void setInteraction(Interaction i) {
+        interaction = i;
+        repaint();
     }
 
     /** Horizontal pan of a row too long to show (pixels from the start), and its maximum. */
@@ -327,15 +363,20 @@ public final class CardRow extends JComponent {
     // ------------------------------------------------------------------ right-click menu
 
     private void maybeMenu(MouseEvent e) {
-        if (!e.isPopupTrigger() && !(SwingUtilities.isRightMouseButton(e) && e.getID() == MouseEvent.MOUSE_PRESSED)) {
+        // Right button pressed (on every system; the release isn't used, so the menu opens once).
+        if (!(SwingUtilities.isRightMouseButton(e) && e.getID() == MouseEvent.MOUSE_PRESSED)) {
             return;
-        }
-        if (!grouping) {
-            return;   // hands: a card menu comes with human play
         }
         int i = pileAt(e.getPoint());
         if (i < 0) {
+            if (emptyMenu != null) {
+                emptyMenu.accept(e);   // empty space: the board's menu (auto-tap, auto-pass, stops)
+                e.consume();
+            }
             return;
+        }
+        if (!grouping) {
+            return;   // hands: a card menu comes later
         }
         JPopupMenu menu = buildMenu(piles.get(i));
         menu.show(this, e.getX(), e.getY());
@@ -612,8 +653,22 @@ public final class CardRow extends JComponent {
     }
 
     private void outline(Graphics2D g, CardSnapshot card, Rectangle r, boolean selected) {
+        Color mark = interaction == null ? null : interaction.mark(card);
+        if (mark != null) {
+            // Something you can do with this card now (play it, target it, attack or block with it):
+            // a soft glow around it, stronger when hovered.
+            boolean hot = hovered != null && hovered.id() == card.id();
+            int arc = Math.max(4, r.width / 10);
+            for (int i = 3; i >= 1; i--) {
+                int grow = Theme.px(1.4) * i;
+                g.setColor(new Color(mark.getRed(), mark.getGreen(), mark.getBlue(), (hot ? 90 : 55) + (3 - i) * 35));
+                g.setStroke(new BasicStroke(Math.max(1.5f, Theme.px(1.6))));
+                g.drawRoundRect(r.x - grow, r.y - grow, r.width - 1 + 2 * grow, r.height - 1 + 2 * grow, arc + grow, arc + grow);
+            }
+        }
         Color color = card.attacking() ? Theme.ATTACKING
             : card.blocking() ? Theme.BLOCKING
+            : mark != null ? mark
             : selected || hovered != null && hovered.id() == card.id() ? Theme.ACCENT : null;
         if (color == null) {
             return;

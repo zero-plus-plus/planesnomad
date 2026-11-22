@@ -87,6 +87,21 @@ public final class BoardPanel extends JPanel {
     }
 
     /** All battlefield rows, enemy's first. */
+    /** y of the middle line between the two halves, in this panel's coordinates. */
+    public int midline() {
+        return midlineY;
+    }
+
+    /** Every row: hands and battlefields. */
+    public List<CardRow> allRows() {
+        return List.of(enemyHand, enemyLands, enemyOther, enemyCreatures, youCreatures, youOther, youLands, youHand);
+    }
+
+    /** Top of your hand row, in this panel's coordinates (the prompt bar sits just above it). */
+    public int yourHandTop() {
+        return youHand.getY();
+    }
+
     public List<CardRow> battlefieldRows() {
         return List.of(enemyLands, enemyOther, enemyCreatures, youCreatures, youOther, youLands);
     }

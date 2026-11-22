@@ -29,6 +29,7 @@ import java.awt.Dimension;
  * Card pictures: add -Dplanesnomad.cardImages=<folder> (Forge's picture cache is found by itself).
  * "unlimited" / "mixed" play decks built from printings that match the test pictures
  * (Unlimited only, or Torment + Shadowmoor + Future Sight + Khans of Tarkir).
+ * "play" (or "play-unlimited", "play-mixed"): you play the bottom deck yourself against the AI.
  * "boards" shows the stress-test boards instead of a match (e.g. Krenko with 200 goblins),
  * frozen, to try piles and the right-click menu; the "Test boards" menu switches between them.
  */
@@ -113,6 +114,7 @@ public final class MatchViewerApp {
 
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setJMenuBar(menu());
+        view.setStops(stopsModel, this::syncStopViews);
         frame.setContentPane(view);
         frame.setMinimumSize(new Dimension(1024, 600));
         frame.setSize(Theme.REF_WIDTH, Theme.REF_HEIGHT + 40);
@@ -209,6 +211,9 @@ public final class MatchViewerApp {
         settings.add(pileHint);
         bar.add(settings);
         bar.add(themeMenu());
+        if (!testDecks.equals("boards")) {
+            bar.add(devMenu());
+        }
         bar.add(stopsMenu());
         if (testDecks.equals("boards")) {
             JMenu boards = new JMenu("Test boards");
@@ -261,6 +266,30 @@ public final class MatchViewerApp {
         }
     }
 
+    private final java.util.Map<String, JCheckBoxMenuItem> stopItems = new java.util.HashMap<>();
+
+    /** Stops as shown on the player panels' phase strips, the board menu and the Stops menu. */
+    private final com.planesnomad.gui.ui.PhaseColumn.Stops stopsModel = new com.planesnomad.gui.ui.PhaseColumn.Stops() {
+        @Override
+        public boolean isStop(boolean yourTurn, forge.game.phase.PhaseType phase) {
+            return stops.contains(MatchRunner.stopKey(yourTurn, phase));
+        }
+
+        @Override
+        public void setStop(boolean yourTurn, forge.game.phase.PhaseType phase, boolean on) {
+            String key = MatchRunner.stopKey(yourTurn, phase);
+            if (on) stops.add(key); else stops.remove(key);
+            if (runner != null) runner.setStop(yourTurn, phase, on);
+            syncStopViews();
+        }
+    };
+
+    /** Keeps the Stops menu's check marks and the phase strips in step. */
+    private void syncStopViews() {
+        stopItems.forEach((key, item) -> item.setSelected(stops.contains(key)));
+        view.repaint();
+    }
+
     /** Forge-style phase stops: play pauses at these phase changes; other phases go by quickly. */
     private JMenu stopsMenu() {
         JMenu menu = new JMenu("Stops");
@@ -275,11 +304,9 @@ public final class MatchViewerApp {
             for (forge.game.phase.PhaseType ph : phases) {
                 String key = MatchRunner.stopKey(yours, ph);
                 JCheckBoxMenuItem item = new JCheckBoxMenuItem(ph.nameForUi, stops.contains(key));
-                item.addActionListener(e -> {
-                    if (item.isSelected()) stops.add(key); else stops.remove(key);
-                    if (runner != null) runner.setStop(yours, ph, item.isSelected());
-                });
+                item.addActionListener(e -> stopsModel.setStop(yours, ph, item.isSelected()));
                 side.add(item);
+                stopItems.put(key, item);
             }
             menu.add(side);
         }
@@ -304,11 +331,53 @@ public final class MatchViewerApp {
         return menu;
     }
 
+    /** The match to play: set by the start mode, then by the Dev menu's match setup. */
+    private com.planesnomad.match.MatchSetup setup;
+    private com.planesnomad.match.DeckLibrary decks;
+
+    private com.planesnomad.match.MatchSetup initialSetup() {
+        // "play", "play-unlimited", "play-mixed": you play the bottom side; otherwise AI vs AI.
+        boolean person = testDecks.startsWith("play");
+        String which = person ? testDecks.replaceFirst("^play-?", "") : testDecks;
+        return com.planesnomad.match.Presets.testMatch(which, person);
+    }
+
+    /** Starts a match from the current setup (ending the one before, if any). */
     private void startMatch() {
-        Match match = TestMatches.create(testDecks, db);
-        var looks = TestMatches.looks(testDecks);
-        runner = new MatchRunner(match, TestMatches.YOU, TestMatches.ENEMY, looks[0], looks[1],
-            snapshot -> SwingUtilities.invokeLater(() -> view.update(snapshot)));
+        if (decks == null) {
+            decks = new com.planesnomad.match.DeckLibrary(db);
+        }
+        if (setup == null) {
+            setup = initialSetup();
+        }
+        if (runner != null) {
+            runner.stop();   // the old match ends; its snapshots no longer reach the screen
+        }
+        boolean person = setup.you().controller() == com.planesnomad.match.MatchSetup.Controller.PERSON;
+        com.planesnomad.gui.engine.HumanBridge bridge = person ? new com.planesnomad.gui.engine.HumanBridge() : null;
+        MatchRunner[] self = new MatchRunner[1];
+        Match match;
+        try {
+            match = com.planesnomad.match.MatchFactory.create(setup, db, decks, bridge,
+                (yours, phase) -> self[0] != null && self[0].isStop(yours, phase));
+        } catch (IllegalArgumentException e) {
+            javax.swing.JOptionPane.showMessageDialog(frame, e.getMessage(), "Can't start the match",
+                javax.swing.JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+        view.setHumanBridge(bridge);
+        frame.setTitle("Planesnomad - " + setup.you().name() + " vs " + setup.enemy().name()
+            + (person ? "" : " (AI vs AI)"));
+        self[0] = new MatchRunner(match, setup.you().name(), setup.enemy().name(), setup.you().look(), setup.enemy().look(),
+            snapshot -> SwingUtilities.invokeLater(() -> {
+                if (runner == self[0]) {
+                    view.update(snapshot);
+                }
+            }));
+        runner = self[0];
+        if (bridge != null) {
+            runner.setHumanBridge(bridge);
+        }
         runner.setPaused(paused);
         runner.setSpeed(speed);
         runner.setRevealEnemyHand(revealEnemyHand);
@@ -322,5 +391,40 @@ public final class MatchViewerApp {
             runner.setStop(key.startsWith("you:"), forge.game.phase.PhaseType.valueOf(key.substring(key.indexOf(':') + 1)), true);
         }
         runner.start();
+    }
+
+    /** Developer controls (testing only; in the game these come from the run and the encounter). */
+    private JMenu devMenu() {
+        JMenu menu = new JMenu("Dev");
+        JMenuItem edit = new JMenuItem("Match setup... (decks, who plays, life, relics, looks)");
+        edit.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_M, java.awt.event.InputEvent.CTRL_DOWN_MASK));
+        edit.addActionListener(e -> {
+            if (decks == null) {
+                decks = new com.planesnomad.match.DeckLibrary(db);
+            }
+            var dialog = new MatchSetupDialog(frame, setup == null ? initialSetup() : setup, decks,
+                com.planesnomad.match.MatchFactory.commandCardChoices(db), name -> db.getCard(name) != null);
+            var chosen = dialog.ask();
+            if (chosen != null) {
+                setup = chosen;
+                startMatch();
+            }
+        });
+        menu.add(edit);
+        JMenuItem restart = new JMenuItem("Restart match (same setup)");
+        restart.addActionListener(e -> startMatch());
+        menu.add(restart);
+        menu.addSeparator();
+        for (String[] p : new String[][] {{"Test match: you vs AI", "play"}, {"Test match: AI vs AI", ""},
+                {"Unlimited decks: you vs AI", "play-unlimited"}, {"Mixed eras: you vs AI", "play-mixed"}}) {
+            JMenuItem it = new JMenuItem(p[0]);
+            it.addActionListener(e -> {
+                String which = p[1].replaceFirst("^play-?", "");
+                setup = com.planesnomad.match.Presets.testMatch(which, p[1].startsWith("play"));
+                startMatch();
+            });
+            menu.add(it);
+        }
+        return menu;
     }
 }

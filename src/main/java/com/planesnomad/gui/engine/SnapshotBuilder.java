@@ -117,8 +117,8 @@ public final class SnapshotBuilder {
         String result = null;
         if (game.isGameOver() && game.getOutcome() != null) {
             var outcome = game.getOutcome();
-            result = outcome.isDraw() ? "Draw"
-                : outcome.getWinningPlayer().getPlayer().getName() + " wins";
+            String winner = outcome.isDraw() ? null : outcome.getWinningPlayer().getPlayer().getName();
+            result = winner == null ? "Draw" : winner.equals("You") ? "You win" : winner + " wins";
         }
 
         return new MatchSnapshot(
@@ -503,7 +503,8 @@ public final class SnapshotBuilder {
                 kind,
                 sa != null && sa == resolvingNow,
                 source == null ? null : stackCard(source, kind, detail),
-                source == null ? null : relicOf(source)));
+                source == null ? null : relicOf(source),
+                si.getId()));
         }
         return out;
     }

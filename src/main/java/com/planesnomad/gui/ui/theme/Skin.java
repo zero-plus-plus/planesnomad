@@ -40,7 +40,7 @@ public final class Skin {
     private static final java.util.List<String> ELEMENTS = java.util.List.of(
         "table.you", "table.enemy", "hand", "panel", "column", "topbar", "popup", "stack",
         "badge.life", "badge.count", "badge.selected", "tag",
-        "button", "button.hover", "button.pressed", "button.disabled", "relic.slot", "relic.frame", "consumable.frame", "consumable.empty", "inspect");
+        "button", "button.hover", "button.pressed", "button.disabled", "relic.slot", "relic.frame", "consumable.frame", "consumable.empty", "inspect", "prompt", "phases", "choice");
 
     /**
      * Built-in look per element, from the theme's colors (so changing e.g. color.panel changes
@@ -65,6 +65,9 @@ public final class Skin {
             case "button.disabled" -> new Base(Theme.blend(Theme.PANEL, Color.WHITE, 0.04), Theme.PANEL_EDGE, 1, 2);
             case "relic.slot" -> new Base(new Color(0x5B6574), null, 0, -1);
             case "relic.frame", "consumable.frame", "consumable.empty" -> new Base(new Color(0, 0, 0, 0), null, 0, 0);
+            case "choice" -> new Base(new Color(10, 12, 16, 225), Theme.ACCENT, 2, 10);
+            case "phases" -> new Base(Theme.blend(Theme.PANEL, Color.BLACK, 0.15), Theme.PANEL_EDGE, 0, 0);
+            case "prompt" -> new Base(Theme.PANEL, Theme.ACCENT, 2, 8);
             case "inspect" -> new Base(new Color(14, 16, 21, 236), new Color(0x3A414D), 1, 4);
             default -> new Base(Theme.PANEL, null, 0, 0);
         };

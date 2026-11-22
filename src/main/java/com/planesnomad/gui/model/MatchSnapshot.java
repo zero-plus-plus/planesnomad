@@ -51,10 +51,17 @@ public record MatchSnapshot(
      * @param kind   spell, activated ability or trigger (abilities are shown with their source card)
      * @param resolving true while this item is resolving, e.g. waiting for a player's choice
      * @param relic  set if the source is a relic or consumable: show it as a relic, not a card
+     * @param id     the engine's id of the stack entry (for choosing it as a target)
      */
     public record StackItem(String controller, String text, String detail, boolean byYou,
-                            Kind kind, boolean resolving, CardSnapshot source, RelicSnapshot relic) {
+                            Kind kind, boolean resolving, CardSnapshot source, RelicSnapshot relic, int id) {
         public enum Kind { SPELL, ABILITY, TRIGGER }
+
+        /** Without an id (e.g. built by a test). */
+        public StackItem(String controller, String text, String detail, boolean byYou,
+                         Kind kind, boolean resolving, CardSnapshot source, RelicSnapshot relic) {
+            this(controller, text, detail, byYou, kind, resolving, source, relic, 0);
+        }
     }
 
     /** One game log line. Turn headers are shown differently. */

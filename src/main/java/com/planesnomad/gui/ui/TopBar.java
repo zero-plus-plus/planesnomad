@@ -73,6 +73,10 @@ public final class TopBar extends JPanel {
         left.add(lives);
 
         JPanel right = row();
+        // The status text takes the space left and shortens ("…", full text as tooltip) when
+        // space is short, so the buttons always stay visible.
+        right.add(Box.createHorizontalGlue());
+        status.setMinimumSize(new Dimension(Theme.px(60), 1));
         right.add(status);
         right.add(Box.createHorizontalStrut(Theme.px(12)));
         for (JComponent c : new JComponent[] {pause, step, speed, revealHand, newMatch}) {
@@ -97,7 +101,7 @@ public final class TopBar extends JPanel {
         newMatch.addActionListener(e -> controls.newMatch());
 
         content.add(left, BorderLayout.WEST);
-        content.add(right, BorderLayout.EAST);
+        content.add(right, BorderLayout.CENTER);
 
         // Small, out-of-the-way collapse button in the top-right corner.
         // The arrow is drawn, not a text character: some fonts (e.g. on Windows) lack the triangles.
@@ -121,6 +125,19 @@ public final class TopBar extends JPanel {
     @Override
     protected void paintComponent(java.awt.Graphics g) {
         com.planesnomad.gui.ui.theme.Skin.paint((java.awt.Graphics2D) g, "topbar", 0, 0, getWidth(), getHeight());
+    }
+
+    /** Left-click on a relic or consumable (while a person plays): receives its name. */
+    private java.util.function.Consumer<String> relicClick;
+
+    public void setRelicClick(java.util.function.Consumer<String> click) {
+        relicClick = click;
+        for (java.awt.Component c : relicRow.getComponents()) {
+            if (c instanceof RelicIcon icon) {
+                icon.setOnClick(click);
+            }
+        }
+        consumableSlots.forEach(s -> s.setOnClick(click));
     }
 
     public void onCollapseChanged(Runnable r) {
@@ -187,6 +204,7 @@ public final class TopBar extends JPanel {
         for (RelicSnapshot r : relics) {
             RelicIcon icon = new RelicIcon(false);
             icon.setRelic(r);
+            icon.setOnClick(relicClick);
             relicRow.add(icon);
         }
         for (int i = 0; i < consumableSlots.size(); i++) {
@@ -195,9 +213,15 @@ public final class TopBar extends JPanel {
         lives.setText("♥ " + runLives);
         lives.setToolTipText("Lives left in this run");
 
-        status.setText(s.finished()
+        String statusText = s.finished()
             ? "Turn " + s.turn() + " · " + s.result()
-            : "Turn " + s.turn() + " · " + s.activePlayer() + " · " + s.phase());
+            : "Turn " + s.turn() + " · " + s.activePlayer() + " · " + s.phase();
+        if (!statusText.equals(status.getText())) {
+            status.setText(statusText);
+            status.setToolTipText(statusText);
+            status.setPreferredSize(null);   // measure the new text (phase names differ in length)
+            revalidate();
+        }
         newMatch.setEnabled(s.finished());
         relicRow.revalidate();
         relicRow.repaint();

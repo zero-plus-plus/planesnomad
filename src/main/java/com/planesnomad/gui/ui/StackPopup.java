@@ -80,6 +80,16 @@ public final class StackPopup extends JComponent {
             }
 
             @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e) && itemClick != null) {
+                    StackItem hit = itemAt(e.getPoint());
+                    if (hit != null) {
+                        itemClick.accept(hit);
+                    }
+                }
+            }
+
+            @Override
             public void mouseDragged(MouseEvent e) {
                 if (resizing) {
                     // The grip follows the mouse: the card width sets the size.
@@ -121,6 +131,17 @@ public final class StackPopup extends JComponent {
                 setSizeScale(sizeScale * (e.getPreciseWheelRotation() < 0 ? 1.1 : 1 / 1.1));
             }
         });
+    }
+
+    /** While a person plays: highlight for stack items (e.g. a spell you can counter) and their click. */
+    private java.util.function.Function<StackItem, Color> itemMark;
+    private java.util.function.Consumer<StackItem> itemClick;
+
+    public void setItemInteraction(java.util.function.Function<StackItem, Color> mark,
+                                   java.util.function.Consumer<StackItem> click) {
+        itemMark = mark;
+        itemClick = click;
+        repaint();
     }
 
     /** Resize (clamped to {@link #MIN_SCALE}..{@link #MAX_SCALE}); keeps the pop-up inside the board. */
@@ -264,8 +285,9 @@ public final class StackPopup extends JComponent {
                 g.setColor(Theme.PANEL);
                 g.fillRoundRect(x, y, cardW(), cardH(), arc, arc);
             }
-            // Controller outline
-            g.setColor(item.byYou() ? Theme.YOU : Theme.ENEMY);
+            // Controller outline (or the highlight of a stack item you can choose now)
+            Color mark = itemMark == null ? null : itemMark.apply(item);
+            g.setColor(mark != null ? mark : item.byYou() ? Theme.YOU : Theme.ENEMY);
             g.setStroke(new BasicStroke(Math.max(2f, Theme.px(2.5))));
             g.drawRoundRect(x, y, cardW() - 1, cardH() - 1, Theme.px(8), Theme.px(8));
             // Tags, on the front card only (others show just their title strip)

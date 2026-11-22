@@ -62,6 +62,20 @@ public final class MatchView extends JPanel {
         @Override
         public void doLayout() {
             board.setBounds(0, 0, getWidth(), getHeight());
+            board.doLayout();
+            if (choicePanel.isVisible()) {
+                java.awt.Dimension c = choicePanel.getPreferredSize();
+                choicePanel.setBounds((getWidth() - c.width) / 2, Math.max(0, (getHeight() - c.height) / 2 - Theme.px(30)),
+                    c.width, c.height);
+            }
+            if (promptBar.isVisible()) {
+                promptBar.setMaxWidth(getWidth() - Theme.px(20));   // wraps its text rather than overflow
+                java.awt.Dimension d = promptBar.getPreferredSize();
+                int w = Math.min(d.width, getWidth() - Theme.px(20));
+                int y = Math.max(0, board.yourHandTop() - d.height - Theme.px(6));
+                promptBar.setBounds((getWidth() - w) / 2, y, w, d.height);
+                promptBar.doLayout();
+            }
             stackPopup.setSize(stackPopup.getPreferredSize());
             if (stackPopup.movedByUser()) {
                 stackPopup.moveWithin(stackPopup.getX(), stackPopup.getY());   // keep it on screen
@@ -71,6 +85,20 @@ public final class MatchView extends JPanel {
         }
     };
     private boolean rememberStackPosition;
+    /** While a person plays: the question bar, and what clicks mean (null when watching AI vs AI). */
+    private final PromptBar promptBar = new PromptBar();
+    /** Cards to decide about (scry, surveil): shown large in the middle of the board. */
+    private final CardChoicePanel choicePanel = new CardChoicePanel(preview);
+    /** Phases of each player's turn, with stops: left of the battlefield (enemy's turn on top, yours below). */
+    private final PhaseColumn phaseColumn = new PhaseColumn(() -> {
+        java.awt.Point p = SwingUtilities.convertPoint(board, 0, board.midline(), getPhaseColumnSafe());
+        return p.y;
+    });
+
+    private java.awt.Component getPhaseColumnSafe() {
+        return phaseColumn == null ? this : phaseColumn;
+    }
+    private PlayInput input;
     private KeyEventDispatcher tabDispatcher;
     /** Setting: the large card view shows while Q is held (true, default) or toggles on each press. */
     private boolean holdForLarge = true;
@@ -124,6 +152,11 @@ public final class MatchView extends JPanel {
         add(left, BorderLayout.WEST);
         boardLayer.add(board, JLayeredPane.DEFAULT_LAYER);
         boardLayer.add(stackPopup, JLayeredPane.PALETTE_LAYER);
+        boardLayer.add(promptBar, JLayeredPane.MODAL_LAYER);
+        boardLayer.add(choicePanel, JLayeredPane.MODAL_LAYER);
+        for (CardRow row : board.allRows()) {
+            row.setEmptyMenu(this::boardMenu);
+        }
         stackPopup.setVisible(false);
         // Right column: a small header with the collapse button, then stack + log.
         JPanel header = new SkinPanel("column", new BorderLayout());
@@ -152,7 +185,11 @@ public final class MatchView extends JPanel {
         collapseButton.addActionListener(e -> setStackColumnCollapsed(true));
         expandButton.addActionListener(e -> setStackColumnCollapsed(false));
         center.add(split, BorderLayout.CENTER);
-        add(center, BorderLayout.CENTER);
+        // The phase column runs along the left of the battlefield; its halves follow the board's middle line.
+        JPanel boardArea = new JPanel(new BorderLayout());
+        boardArea.add(phaseColumn, BorderLayout.WEST);
+        boardArea.add(center, BorderLayout.CENTER);
+        add(boardArea, BorderLayout.CENTER);
         // Default: the history bar; the full log column is one click (or Tab) away.
         setStackColumnCollapsed(true);
 
@@ -200,15 +237,31 @@ public final class MatchView extends JPanel {
         });
     }
 
-    /** Tab (default key) shows or hides the full stack list; works even though Swing normally uses Tab for focus. */
+    /**
+     * Tab (default key) shows or hides the full stack list; works even though Swing normally uses
+     * Tab for focus. While playing: Space = the prompt's main button (Pass, Attack, ...), Esc = cancel.
+     */
     @Override
     public void addNotify() {
         super.addNotify();
         tabDispatcher = e -> {
-            if (e.getID() == KeyEvent.KEY_PRESSED && e.getKeyCode() == STACK_DETAILS_KEY && e.getModifiersEx() == 0
-                && SwingUtilities.getWindowAncestor(this) == KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow()) {
+            if (e.getID() != KeyEvent.KEY_PRESSED || e.getModifiersEx() != 0
+                || SwingUtilities.getWindowAncestor(this) != KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow()) {
+                return false;
+            }
+            if (e.getKeyCode() == STACK_DETAILS_KEY) {
                 toggleStackDetails();
                 return true;
+            }
+            if (input != null && input.request() != null) {
+                if (e.getKeyCode() == KeyEvent.VK_SPACE) {
+                    input.primary();
+                    return true;
+                }
+                if (e.getKeyCode() == KeyEvent.VK_ESCAPE && !preview.isLargeShowing()) {
+                    input.cancel();
+                    return true;
+                }
             }
             return false;
         };
@@ -234,6 +287,109 @@ public final class MatchView extends JPanel {
             return;
         }
         stackAndLog.setStackExpanded(!stackAndLog.isStackExpanded());
+    }
+
+    /**
+     * A person plays the bottom player: the engine's questions arrive through the bridge; cards,
+     * portraits, relics and stack items become clickable, and the prompt bar shows what is asked.
+     */
+    public void setHumanBridge(com.planesnomad.gui.engine.HumanBridge bridge) {
+        if (bridge == null) {
+            // Watching AI vs AI: nothing is clickable, no prompt.
+            input = null;
+            for (CardRow row : board.allRows()) {
+                row.setInteraction(null);
+            }
+            enemyPanel.setPortraitInteraction(null, null);
+            youPanel.setPortraitInteraction(null, null);
+            topBar.setRelicClick(null);
+            stackPopup.setItemInteraction(null, null);
+            promptBar.show(null, java.util.List.of());
+            choicePanel.setModel(null);
+            return;
+        }
+        input = new PlayInput(bridge, this, this::refreshInput);
+        bridge.setListener(r -> SwingUtilities.invokeLater(() -> input.onRequest(r)));
+        for (CardRow row : board.allRows()) {
+            row.setInteraction(input);
+        }
+        enemyPanel.setPortraitInteraction(input::playerMark, input::playerClick);
+        youPanel.setPortraitInteraction(input::playerMark, input::playerClick);
+        topBar.setRelicClick(input::relicClick);
+        stackPopup.setItemInteraction(input::stackMark, input::stackClick);
+    }
+
+    /**
+     * Where stops are kept: the phase strips on the player panels show and change them, and the
+     * board's right-click menu offers them too.
+     */
+    public void setStops(PhaseColumn.Stops stops, Runnable onChange) {
+        this.stops = stops;
+        phaseColumn.setStops(stops, onChange);
+    }
+
+    private PhaseColumn.Stops stops;
+
+    /** Right-click on empty board space: playing options (auto-tap, auto-pass) and stops. */
+    private void boardMenu(java.awt.event.MouseEvent e) {
+        javax.swing.JPopupMenu menu = new javax.swing.JPopupMenu();
+        if (input != null) {
+            var bridge = input.bridge();
+            javax.swing.JCheckBoxMenuItem tap = new javax.swing.JCheckBoxMenuItem("Tap lands automatically to pay mana", bridge.autoTap());
+            tap.setToolTipText("Off: when you cast something, you click the lands to tap");
+            tap.addActionListener(a -> bridge.setAutoTap(tap.isSelected()));
+            menu.add(tap);
+            menu.addSeparator();
+            javax.swing.JMenuItem untilEvent = new javax.swing.JMenuItem("Pass turn");
+            untilEvent.setToolTipText("Pass until the enemy casts or activates something, or your next turn starts");
+            untilEvent.addActionListener(a -> input.autoPass(com.planesnomad.gui.engine.HumanBridge.AutoPass.UNTIL_EVENT));
+            menu.add(untilEvent);
+            javax.swing.JMenuItem endTurn = new javax.swing.JMenuItem("Auto-pass all");
+            endTurn.setToolTipText("Pass everything until this turn ends (you still choose blockers)");
+            endTurn.addActionListener(a -> input.autoPass(com.planesnomad.gui.engine.HumanBridge.AutoPass.END_OF_TURN));
+            menu.add(endTurn);
+            if (bridge.autoPass() != com.planesnomad.gui.engine.HumanBridge.AutoPass.NONE) {
+                javax.swing.JMenuItem stop = new javax.swing.JMenuItem("Stop passing");
+                stop.addActionListener(a -> input.autoPass(com.planesnomad.gui.engine.HumanBridge.AutoPass.NONE));
+                menu.add(stop);
+            }
+        }
+        if (stops != null) {
+            if (menu.getComponentCount() > 0) {
+                menu.addSeparator();
+            }
+            for (boolean yours : new boolean[] {true, false}) {
+                javax.swing.JMenu side = new javax.swing.JMenu(yours ? "Stops on your turn" : "Stops on the enemy's turn");
+                for (forge.game.phase.PhaseType ph : PhaseColumn.PHASES) {
+                    javax.swing.JCheckBoxMenuItem it = new javax.swing.JCheckBoxMenuItem(ph.nameForUi, stops.isStop(yours, ph));
+                    it.addActionListener(a -> {
+                        stops.setStop(yours, ph, it.isSelected());
+                        phaseColumn.repaint();
+                    });
+                    side.add(it);
+                }
+                menu.add(side);
+            }
+        }
+        if (menu.getComponentCount() > 0) {
+            menu.show(e.getComponent(), e.getX(), e.getY());
+        }
+    }
+
+    public PlayInput playInput() {
+        return input;
+    }
+
+    /** The question or the choices changed: prompt bar and highlights. */
+    private void refreshInput() {
+        choicePanel.setModel(input.choiceModel());
+        promptBar.show(input.prompt(), input.actions());
+        boardLayer.doLayout();
+        board.allRows().forEach(java.awt.Component::repaint);
+        enemyPanel.repaint();
+        youPanel.repaint();
+        stackPopup.repaint();
+        promptBar.repaint();
     }
 
     public HistoryBar historyBar() {
@@ -389,6 +545,11 @@ public final class MatchView extends JPanel {
     /** Must be called on the Swing thread. */
     public void update(MatchSnapshot s) {
         last = s;
+        // The phase strips: the current phase is lit on the panel of the player whose turn it is.
+        phaseColumn.setCurrent(s.phase(), s.activePlayer().equals(s.you().name()));
+        if (input != null) {
+            refreshInput();
+        }
         topBar.update(s, runLives);
         enemyPanel.update(s.enemy());
         youPanel.update(s.you());
