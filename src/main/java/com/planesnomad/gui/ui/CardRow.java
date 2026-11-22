@@ -581,19 +581,16 @@ public final class CardRow extends JComponent {
     /** "×200", or "37/200" when some are selected; at the top left, the part that stays visible. */
     private static void badge(Graphics2D g, Rectangle card, int count, int selected) {
         String text = selected > 0 ? selected + "/" + count : "×" + count;
-        g.setFont(Theme.font(Font.BOLD, 11));
+        g.setFont(Theme.font(Theme.FontRole.NUMBERS, Font.BOLD, 11));
         FontMetrics fm = g.getFontMetrics();
         int padX = Math.max(2, Theme.px(3));
         int w = fm.stringWidth(text) + 2 * padX;
         int h = fm.getAscent() + Math.max(2, Theme.px(2));
         int x = card.x + Math.max(1, Theme.px(2));
         int y = card.y + Math.max(1, Theme.px(2));
-        g.setColor(selected > 0 ? Theme.ACCENT : new Color(10, 12, 16, 225));
-        g.fillRoundRect(x, y, w, h, h / 2, h / 2);
-        g.setColor(selected > 0 ? Theme.ACCENT.brighter() : Theme.TEXT_DIM);
-        g.setStroke(new BasicStroke(1f));
-        g.drawRoundRect(x, y, w - 1, h - 1, h / 2, h / 2);
-        g.setColor(selected > 0 ? new Color(0x1A1A1A) : Theme.TEXT);
+        String element = selected > 0 ? "badge.selected" : "badge.count";
+        com.planesnomad.gui.ui.theme.Skin.paint(g, element, x, y, w, h);
+        g.setColor(com.planesnomad.gui.ui.theme.Skin.text(element, selected > 0 ? new Color(0x1A1A1A) : Theme.TEXT));
         g.drawString(text, x + padX, y + fm.getAscent());
     }
 

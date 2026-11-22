@@ -44,7 +44,6 @@ public final class HistoryBar extends JComponent {
 
     public HistoryBar() {
         setOpaque(true);
-        setBackground(Theme.PANEL);
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mouseMoved(MouseEvent e) {
@@ -134,8 +133,7 @@ public final class HistoryBar extends JComponent {
         Graphics2D g = (Graphics2D) g0.create();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setColor(getBackground());
-        g.fillRect(0, 0, getWidth(), getHeight());
+        com.planesnomad.gui.ui.theme.Skin.paint(g, "column", 0, 0, getWidth(), getHeight());
         boxes.clear();
         boxEntries.clear();
 
@@ -248,13 +246,12 @@ public final class HistoryBar extends JComponent {
         }
         if (e.count() > 1) {
             String t = "×" + e.count();
-            g.setFont(Theme.font(Font.BOLD, 10));
+            g.setFont(Theme.font(Theme.FontRole.NUMBERS, Font.BOLD, 10));
             FontMetrics fm = g.getFontMetrics();
             int bw = fm.stringWidth(t) + Theme.px(6);
             int bh = fm.getAscent() + Theme.px(2);
-            g.setColor(new Color(10, 12, 16, 225));
-            g.fillRoundRect(r.x - Theme.px(2), r.y - Theme.px(2), bw, bh, bh / 2, bh / 2);
-            g.setColor(Theme.TEXT);
+            com.planesnomad.gui.ui.theme.Skin.paint(g, "badge.count", r.x - Theme.px(2), r.y - Theme.px(2), bw, bh);
+            g.setColor(com.planesnomad.gui.ui.theme.Skin.text("badge.count", Theme.TEXT));
             g.drawString(t, r.x - Theme.px(2) + Theme.px(3), r.y - Theme.px(2) + fm.getAscent());
         }
     }

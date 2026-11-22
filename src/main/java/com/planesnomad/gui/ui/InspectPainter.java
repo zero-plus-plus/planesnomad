@@ -170,11 +170,7 @@ public final class InspectPainter {
     }
 
     private static void panel(Graphics2D g, int x, int y, int w, int h, int cardW) {
-        int arc = Math.max(6, cardW / 25);
-        g.setColor(PANEL);
-        g.fillRoundRect(x, y, w, h, arc, arc);
-        g.setColor(PANEL_EDGE);
-        g.setStroke(new BasicStroke(Math.max(1f, cardW / 300f)));
-        g.drawRoundRect(x, y, w, h, arc, arc);
+        // Themed element "inspect" (the text panel beside an inspected card).
+        com.planesnomad.gui.ui.theme.Skin.paint(g, "inspect", x, y, w, h);
     }
 }

@@ -91,6 +91,7 @@ public final class MatchViewerApp {
 
     public static void main(String[] args) {
         CardDb db = ForgeEngine.initialize();
+        com.planesnomad.gui.ui.Theme.apply(com.planesnomad.gui.ui.theme.ThemePack.fromSystemProperty());
         String which = args.length > 0 ? args[0].toLowerCase() : "";
         SwingUtilities.invokeLater(() -> {
             MatchViewerApp app = new MatchViewerApp(db);
@@ -207,6 +208,7 @@ public final class MatchViewerApp {
         pileHint.setEnabled(false);
         settings.add(pileHint);
         bar.add(settings);
+        bar.add(themeMenu());
         bar.add(stopsMenu());
         if (testDecks.equals("boards")) {
             JMenu boards = new JMenu("Test boards");
@@ -218,6 +220,45 @@ public final class MatchViewerApp {
             bar.add(boards);
         }
         return bar;
+    }
+
+    /**
+     * Theme menu: pick a theme from the themes folder, or reload the current one after its files
+     * were edited (F5), so a designer sees changes without restarting.
+     */
+    private JMenu themeMenu() {
+        JMenu menu = new JMenu("Theme");
+        javax.swing.ButtonGroup group = new javax.swing.ButtonGroup();
+        String current = com.planesnomad.gui.ui.Theme.pack().name();
+        for (String name : com.planesnomad.gui.ui.theme.ThemePack.available()) {
+            com.planesnomad.gui.ui.theme.ThemePack preview = com.planesnomad.gui.ui.theme.ThemePack.load(name);
+            javax.swing.JRadioButtonMenuItem item = new javax.swing.JRadioButtonMenuItem(
+                preview.displayName(), name.equals(current));
+            item.addActionListener(e -> useTheme(name));
+            group.add(item);
+            menu.add(item);
+        }
+        menu.addSeparator();
+        JMenuItem reload = new JMenuItem("Reload theme files");
+        reload.setAccelerator(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_F5, 0));
+        reload.addActionListener(e -> useTheme(com.planesnomad.gui.ui.Theme.pack().name()));
+        menu.add(reload);
+        JMenuItem folder = new JMenuItem("Themes folder: " + com.planesnomad.gui.ui.theme.ThemePack.themesRoot().toAbsolutePath().normalize());
+        folder.setEnabled(false);
+        menu.add(folder);
+        return menu;
+    }
+
+    /** Loads a theme from its files and redraws the screen; lists any problems found in them. */
+    private void useTheme(String name) {
+        var theme = com.planesnomad.gui.ui.theme.ThemePack.load(name);
+        view.applyTheme(theme);
+        frame.getJMenuBar().repaint();
+        if (!theme.problems().isEmpty()) {
+            javax.swing.JOptionPane.showMessageDialog(frame,
+                "Theme '" + theme.displayName() + "' loaded with problems:\n- " + String.join("\n- ", theme.problems()),
+                "Theme", javax.swing.JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     /** Forge-style phase stops: play pauses at these phase changes; other phases go by quickly. */

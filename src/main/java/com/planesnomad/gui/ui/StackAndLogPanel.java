@@ -48,7 +48,6 @@ public final class StackAndLogPanel extends JPanel {
     public StackAndLogPanel(CardPreview preview) {
         super(new BorderLayout());
         this.preview = preview;
-        setBackground(Theme.PANEL);
 
         stackItems.setLayout(new BoxLayout(stackItems, BoxLayout.Y_AXIS));
         stackItems.setOpaque(false);
@@ -60,12 +59,10 @@ public final class StackAndLogPanel extends JPanel {
         stack.add(stackItems, BorderLayout.CENTER);
 
         logText.setEditable(false);
-        logText.setBackground(Theme.PANEL);
         logText.setFocusable(false);
         logScroll = new JScrollPane(logText, ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED,
             ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         logScroll.setBorder(BorderFactory.createEmptyBorder());
-        logScroll.getViewport().setBackground(Theme.PANEL);
         JPanel log = new JPanel(new BorderLayout());
         log.setOpaque(false);
         log.add(logTitle, BorderLayout.NORTH);
@@ -89,7 +86,14 @@ public final class StackAndLogPanel extends JPanel {
         showStack(List.of());
     }
 
+    /** Fonts, sizes and theme colors (after the scale or the theme changed). */
     public void applyFonts() {
+        java.awt.Color bg = com.planesnomad.gui.ui.theme.Skin.fill("column");
+        setBackground(bg);
+        logText.setBackground(bg);
+        logScroll.getViewport().setBackground(bg);
+        stackTitle.setForeground(Theme.TEXT_DIM);
+        logTitle.setForeground(Theme.TEXT_DIM);
         setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, Theme.PANEL_EDGE));
         stackTitle.setFont(Theme.font(Font.BOLD, 12));
         logTitle.setFont(Theme.font(Font.BOLD, 12));

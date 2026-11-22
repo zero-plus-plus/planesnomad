@@ -90,6 +90,7 @@ public final class StressTest {
         File out = new File(args.length > 0 ? args[0] : "stress");
         out.mkdirs();
         CardDb db = ForgeEngine.initialize();
+        com.planesnomad.gui.ui.Theme.apply(com.planesnomad.gui.ui.theme.ThemePack.fromSystemProperty());
         images = ImageSetup.create();
         System.out.println("Card picture folders: " + images.folders());
         collectPool(db);

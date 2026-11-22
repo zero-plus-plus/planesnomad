@@ -228,10 +228,7 @@ public final class StackPopup extends JComponent {
         hitItems.clear();
 
         int arc = Theme.px(10);
-        g.setColor(new Color(12, 14, 18, 215));
-        g.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
-        g.setColor(Theme.PANEL_EDGE);
-        g.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
+        com.planesnomad.gui.ui.theme.Skin.paint(g, "stack", 0, 0, getWidth(), getHeight());
 
         // Header: title and a hint; the whole pop-up is draggable.
         g.setFont(Theme.font(Font.BOLD, 10));
@@ -309,8 +306,13 @@ public final class StackPopup extends JComponent {
         FontMetrics fm = g.getFontMetrics();
         int w = fm.stringWidth(text) + Theme.px(8);
         int h = fm.getHeight() + Theme.px(2);
-        g.setColor(bg);
-        g.fillRoundRect(x, y, w, h, h, h);
+        if (bg.equals(Theme.ACCENT)) {
+            g.setColor(bg);   // the "Resolving" tag keeps the accent color
+            g.fillRoundRect(x, y, w, h, h, h);
+        } else {
+            com.planesnomad.gui.ui.theme.Skin.paint(g, "tag", x, y, w, h);
+            fg = com.planesnomad.gui.ui.theme.Skin.text("tag", fg);
+        }
         g.setColor(fg);
         g.drawString(text, x + Theme.px(4), y + Theme.px(1) + fm.getAscent());
         return y;

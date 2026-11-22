@@ -44,18 +44,18 @@ public final class TopBar extends JPanel {
     private final List<RelicIcon> consumableSlots = new ArrayList<>();
     private final JLabel lives = new JLabel();
     private final JLabel status = new JLabel();
-    private final JButton pause = new JButton("Pause");
-    private final JButton step = new JButton("Step");
+    private final JButton pause = new com.planesnomad.gui.ui.theme.SkinButton("Pause");
+    private final JButton step = new com.planesnomad.gui.ui.theme.SkinButton("Step");
     private final JComboBox<String> speed = new JComboBox<>(SPEEDS);
     private final JCheckBox revealHand = new JCheckBox("Show enemy hand");
-    private final JButton newMatch = new JButton("New match");
+    private final JButton newMatch = new com.planesnomad.gui.ui.theme.SkinButton("New match");
     private final JButton collapse = new JButton();
     private boolean collapsed;
     private Runnable onCollapseChanged = () -> { };
 
     public TopBar(Controls controls) {
         super(new BorderLayout());
-        setBackground(Theme.TOPBAR);
+        setOpaque(true);
         content.setOpaque(false);
 
         JPanel left = row();
@@ -118,6 +118,11 @@ public final class TopBar extends JPanel {
         applyFonts();
     }
 
+    @Override
+    protected void paintComponent(java.awt.Graphics g) {
+        com.planesnomad.gui.ui.theme.Skin.paint((java.awt.Graphics2D) g, "topbar", 0, 0, getWidth(), getHeight());
+    }
+
     public void onCollapseChanged(Runnable r) {
         onCollapseChanged = r;
     }
@@ -147,6 +152,8 @@ public final class TopBar extends JPanel {
             c.setFont(Theme.font(Font.PLAIN, 11));
         }
         revealHand.setForeground(Theme.TEXT_DIM);
+        speed.setBackground(com.planesnomad.gui.ui.theme.Skin.fill("button"));
+        speed.setForeground(com.planesnomad.gui.ui.theme.Skin.text("button", Theme.TEXT));
         int arrow = Math.max(22, Theme.px(24));   // click area, never tiny on small windows
         collapse.setIcon(new Arrow(arrow, collapsed, false));
         collapse.setRolloverIcon(new Arrow(arrow, collapsed, true));
@@ -210,6 +217,20 @@ public final class TopBar extends JPanel {
 
         @Override
         public void paintIcon(java.awt.Component c, java.awt.Graphics g0, int x, int y) {
+            // A theme can supply its own pictures: icon.collapse (bar open) / icon.expand (bar closed).
+            java.awt.image.BufferedImage custom = com.planesnomad.gui.ui.theme.Skin.icon(down ? "expand" : "collapse");
+            if (custom != null) {
+                java.awt.Graphics2D gi = (java.awt.Graphics2D) g0.create();
+                gi.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+                if (hover) {
+                    gi.setComposite(java.awt.AlphaComposite.SrcOver);
+                } else {
+                    gi.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, 0.8f));
+                }
+                gi.drawImage(custom, x, y, size, size, null);
+                gi.dispose();
+                return;
+            }
             java.awt.Graphics2D g = (java.awt.Graphics2D) g0.create();
             g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
             int arc = size / 3;

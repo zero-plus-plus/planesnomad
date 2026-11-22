@@ -68,7 +68,7 @@ public final class PlayerPanel extends JPanel {
         this.preview = preview;
         this.info = new PlayerInfoPopup(enemy);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        setBackground(Theme.PANEL);
+        setOpaque(true);
 
         effects.setLayout(new BoxLayout(effects, BoxLayout.X_AXIS));
         effects.setOpaque(false);
@@ -104,7 +104,12 @@ public final class PlayerPanel extends JPanel {
         applyFonts();
     }
 
-    /** Re-apply fonts and sizes after the UI scale changed. */
+    @Override
+    protected void paintComponent(java.awt.Graphics g) {
+        com.planesnomad.gui.ui.theme.Skin.paint((java.awt.Graphics2D) g, "panel", 0, 0, getWidth(), getHeight());
+    }
+
+    /** Re-apply fonts, sizes and theme colors (after the UI scale or the theme changed). */
     public void applyFonts() {
         int pad = Theme.px(8);
         setBorder(BorderFactory.createCompoundBorder(
@@ -116,6 +121,7 @@ public final class PlayerPanel extends JPanel {
         subtitle.setForeground(Theme.TEXT_DIM);
         for (JComponent c : new JComponent[] {library, graveyard, exile, hand}) {
             c.setFont(Theme.font(Font.PLAIN, 11));
+            c.setForeground(Theme.TEXT_DIM);
         }
         rebuildEffects();
         revalidate();
@@ -273,18 +279,15 @@ public final class PlayerPanel extends JPanel {
             g.setStroke(new BasicStroke(Math.max(1.5f, Theme.px(2))));
             g.draw(new RoundRectangle2D.Double(1, 1, w - 3, h - 3, arc, arc));
 
-            // Life badge
-            g.setFont(Theme.font(Font.BOLD, 24));
+            // Life badge (themed element "badge.life", number font)
+            g.setFont(Theme.font(Theme.FontRole.NUMBERS, Font.BOLD, 24));
             FontMetrics fm = g.getFontMetrics();
             int bw = Math.max(fm.stringWidth(life) + Theme.px(16), Theme.px(44));
             int bh = fm.getHeight() + Theme.px(2);
             int bx = w - bw - Theme.px(6);
             int by = h - bh - Theme.px(6);
-            g.setColor(new Color(10, 12, 16, 210));
-            g.fillRoundRect(bx, by, bw, bh, bh / 2, bh / 2);
-            g.setColor(Theme.LIFE);
-            g.setStroke(new BasicStroke(Math.max(1f, Theme.px(1.5))));
-            g.drawRoundRect(bx, by, bw, bh, bh / 2, bh / 2);
+            com.planesnomad.gui.ui.theme.Skin.paint(g, "badge.life", bx, by, bw, bh);
+            g.setColor(com.planesnomad.gui.ui.theme.Skin.text("badge.life", Theme.LIFE));
             g.drawString(life, bx + (bw - fm.stringWidth(life)) / 2, by + Theme.px(1) + fm.getAscent());
             g.dispose();
         }

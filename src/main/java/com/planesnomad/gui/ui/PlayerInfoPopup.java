@@ -49,6 +49,7 @@ public final class PlayerInfoPopup {
         Window owner = SwingUtilities.getWindowAncestor(source);
         if (window == null || window.getOwner() != owner) {
             window = new JWindow(owner);
+            com.planesnomad.gui.ui.theme.Skin.makeTranslucent(window);
             canvas = new Canvas();
             window.setContentPane(canvas);
             window.setFocusableWindowState(false);
@@ -141,17 +142,13 @@ public final class PlayerInfoPopup {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
             Color accent = enemy ? Theme.ENEMY : Theme.YOU;
-            g.setColor(Theme.PANEL);
-            g.fillRect(0, 0, w, h);
+            com.planesnomad.gui.ui.theme.Skin.paint(g, "popup", 0, 0, w, h, accent);
             layout(g, w, true);
-            g.setColor(accent);
-            g.setStroke(new BasicStroke(Math.max(1.5f, Theme.px(2))));
-            g.drawRect(1, 1, w - 3, h - 3);
         }
 
         /** Lays out (and, if {@code draw}, paints) the content; returns the height used. */
         int layout(Graphics2D g, int w, boolean draw) {
-            int pad = Theme.px(10);
+            int pad = Theme.px(Theme.pack().number("popup.padding", 10));
             int y = pad;
             int inner = w - 2 * pad;
             Color accent = enemy ? Theme.ENEMY : Theme.YOU;

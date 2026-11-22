@@ -29,7 +29,6 @@ public final class RelicIcon extends JComponent {
 
     private static final int SIZE = 34;
     /** Dark backing behind icon pictures, so any emoji reads on the top bar. */
-    private static final Color BACKING = new Color(0x5B6574);
     /** Icon picture size as a share of the backing shape. */
     private static final double ICON_SHARE = 0.72;
 
@@ -95,6 +94,20 @@ public final class RelicIcon extends JComponent {
         return getPreferredSize();
     }
 
+    /** Background behind relic pictures (theme element "relic.slot"). */
+    private static Color backing() {
+        return com.planesnomad.gui.ui.theme.Skin.fill("relic.slot");
+    }
+
+    /** A theme's frame picture over the icon ("relic.frame" / "consumable.frame"), if it has one. */
+    private static void frame(Graphics2D g, boolean consumable, int x, int y, int d) {
+        String element = consumable ? "consumable.frame" : "relic.frame";
+        if (com.planesnomad.gui.ui.theme.Skin.hasImage(element)) {
+            int ext = (int) Math.round(d * Theme.pack().number(element + ".extend", 0.12));
+            com.planesnomad.gui.ui.theme.Skin.paint(g, element, x - ext, y - ext, d + 2 * ext, d + 2 * ext);
+        }
+    }
+
     /** Draws a relic's placeholder badge (no glow) at the given spot, e.g. inside a card frame. */
     public static void paintBadge(Graphics2D g0, RelicSnapshot relic, int x, int y, int d) {
         Graphics2D g = (Graphics2D) g0.create();
@@ -105,9 +118,9 @@ public final class RelicIcon extends JComponent {
             : new Ellipse2D.Double(x, y, d, d);
         Color base = new Color(relic.color());
         java.awt.image.BufferedImage icon = RelicImages.get(relic.icon(), false);
-        g.setColor(icon != null ? BACKING : Theme.blend(base, Color.BLACK, 0.25));
+        g.setColor(icon != null ? backing() : Theme.blend(base, Color.BLACK, 0.25));
         g.fill(shape);
-        g.setColor(icon != null ? Theme.blend(base, BACKING, 0.4) : Theme.blend(base, Color.WHITE, 0.35));
+        g.setColor(icon != null ? Theme.blend(base, backing(), 0.4) : Theme.blend(base, Color.WHITE, 0.35));
         g.setStroke(new BasicStroke(Math.max(1f, d / 22f)));
         g.draw(shape);
         if (icon != null) {
@@ -119,6 +132,7 @@ public final class RelicIcon extends JComponent {
             g.setColor(Theme.TEXT);
             g.drawString(relic.glyph(), x + (d - fm.stringWidth(relic.glyph())) / 2, y + (d + fm.getAscent() - fm.getDescent()) / 2);
         }
+        frame(g, relic.kind() == Kind.CONSUMABLE, x, y, d);
         g.dispose();
     }
 
@@ -136,6 +150,11 @@ public final class RelicIcon extends JComponent {
             : new Ellipse2D.Double(x, y, d, d);
 
         if (relic == null) {
+            if (com.planesnomad.gui.ui.theme.Skin.hasImage("consumable.empty")) {
+                com.planesnomad.gui.ui.theme.Skin.paint(g, "consumable.empty", x, y, d, d);
+                g.dispose();
+                return;
+            }
             g.setColor(new Color(255, 255, 255, 50));
             g.setStroke(new BasicStroke(Math.max(1f, Theme.px(1.5)), BasicStroke.CAP_ROUND,
                 BasicStroke.JOIN_ROUND, 1f, new float[] {Theme.px(4), Theme.px(3)}, 0f));
@@ -161,12 +180,12 @@ public final class RelicIcon extends JComponent {
         boolean used = relic.state() == State.USED;
         Color base = new Color(relic.color());
         java.awt.image.BufferedImage picture = RelicImages.get(relic.icon(), used);
-        Color fill = picture != null ? BACKING : used ? Theme.RELIC_USED : base;
+        Color fill = picture != null ? backing() : used ? Theme.RELIC_USED : base;
         g.setColor(picture != null ? fill : Theme.blend(fill, Color.BLACK, 0.25));
         g.fill(shape);
         g.setColor(used ? Theme.blend(Theme.RELIC_USED, Color.WHITE, 0.2)
             : relic.state() == State.READY ? Theme.RELIC_GLOW
-            : picture != null ? Theme.blend(base, BACKING, 0.4)
+            : picture != null ? Theme.blend(base, backing(), 0.4)
             : Theme.blend(base, Color.WHITE, 0.35));
         g.setStroke(new BasicStroke(Math.max(1f, Theme.px(1.5))));
         g.draw(shape);
@@ -185,6 +204,8 @@ public final class RelicIcon extends JComponent {
             String glyph = relic.glyph();
             g.drawString(glyph, x + (d - fm.stringWidth(glyph)) / 2, y + (d + fm.getAscent() - fm.getDescent()) / 2);
         }
+        g.setComposite(AlphaComposite.SrcOver);
+        frame(g, square, x, y, d);
         g.dispose();
     }
 }

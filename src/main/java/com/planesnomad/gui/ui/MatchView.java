@@ -14,6 +14,7 @@ import java.awt.BorderLayout;
 import java.awt.Font;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
+import com.planesnomad.gui.ui.theme.SkinPanel;
 import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -50,12 +51,12 @@ public final class MatchView extends JPanel {
     private final TopBar topBar;
     private final PlayerPanel enemyPanel = new PlayerPanel(true, preview);
     private final PlayerPanel youPanel = new PlayerPanel(false, preview);
-    private final JPanel pinnedPreview = new JPanel(new BorderLayout());
+    private final JPanel pinnedPreview = new SkinPanel("panel", new BorderLayout());
     private final CardPreview.CardCanvas pinnedCanvas = new CardPreview.CardCanvas();
     private final JLabel pinnedHint = new JLabel("Hover a card", JLabel.CENTER);
     private final BoardPanel board = new BoardPanel(preview);
     private final StackAndLogPanel stackAndLog = new StackAndLogPanel(preview);
-    private final JPanel left = new JPanel(new WeightedColumn());
+    private final JPanel left = new SkinPanel("panel", new WeightedColumn());
     private final StackPopup stackPopup = new StackPopup(preview, this::toggleStackDetails);
     private final JLayeredPane boardLayer = new JLayeredPane() {
         @Override
@@ -80,10 +81,10 @@ public final class MatchView extends JPanel {
     }
 
     // Right column (stack + log): resizable with a divider, collapsible to a thin strip.
-    private final JPanel rightColumn = new JPanel(new BorderLayout());
+    private final JPanel rightColumn = new SkinPanel("column", new BorderLayout());
     private final javax.swing.JSplitPane split =
         new javax.swing.JSplitPane(javax.swing.JSplitPane.HORIZONTAL_SPLIT, true);
-    private final JPanel collapsedStrip = new JPanel(new BorderLayout());
+    private final JPanel collapsedStrip = new SkinPanel("column", new BorderLayout());
     private final javax.swing.JButton collapseButton = smallButton("»", "Back to the history bar");
     private final javax.swing.JButton expandButton = smallButton("«", "Show the full game log and stack list");
     /** Shown while the log column is collapsed (the default): the match history as icons. */
@@ -104,7 +105,6 @@ public final class MatchView extends JPanel {
         topBar = new TopBar(controls);
         topBar.onCollapseChanged(this::revalidate);
 
-        pinnedPreview.setBackground(Theme.PANEL);
         pinnedPreview.add(pinnedCanvas, BorderLayout.CENTER);
         pinnedPreview.add(pinnedHint, BorderLayout.SOUTH);
         pinnedHint.setForeground(Theme.TEXT_DIM);
@@ -115,7 +115,6 @@ public final class MatchView extends JPanel {
             pinnedHint.setText(card.name());
         });
 
-        left.setBackground(Theme.PANEL);
         left.add(enemyPanel, 1.0);
         left.add(pinnedPreview, 1.6);
         left.add(youPanel, 1.0);
@@ -127,14 +126,12 @@ public final class MatchView extends JPanel {
         boardLayer.add(stackPopup, JLayeredPane.PALETTE_LAYER);
         stackPopup.setVisible(false);
         // Right column: a small header with the collapse button, then stack + log.
-        JPanel header = new JPanel(new BorderLayout());
-        header.setBackground(Theme.PANEL);
+        JPanel header = new SkinPanel("column", new BorderLayout());
         header.add(collapseButton, BorderLayout.EAST);
         rightColumn.add(header, BorderLayout.NORTH);
         rightColumn.add(stackAndLog, BorderLayout.CENTER);
         rightColumn.setMinimumSize(new java.awt.Dimension(Theme.px(160), 0));
         boardLayer.setMinimumSize(new java.awt.Dimension(Theme.px(320), 0));
-        collapsedStrip.setBackground(Theme.PANEL);
         collapsedStrip.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, Theme.PANEL_EDGE));
         collapsedStrip.add(expandButton, BorderLayout.NORTH);
         collapsedStrip.add(historyBar, BorderLayout.CENTER);
@@ -346,6 +343,26 @@ public final class MatchView extends JPanel {
         int x = boardLayer.getWidth() - d.width - margin;
         int y = (boardLayer.getHeight() - d.height) / 2;
         stackPopup.moveWithin(x, y);
+    }
+
+    /**
+     * Use a theme (colors, fonts, frames, icons) and redraw everything. Safe to call any time on
+     * the Swing thread, e.g. from the Settings menu or after a designer edited the theme's files.
+     */
+    public void applyTheme(com.planesnomad.gui.ui.theme.ThemePack theme) {
+        Theme.apply(theme);
+        setBackground(Theme.TABLE);
+        pinnedCanvas.setBackground(Theme.PANEL);
+        pinnedHint.setForeground(Theme.TEXT_DIM);
+        collapsedStrip.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, Theme.PANEL_EDGE));
+        split.setBackground(Theme.PANEL_EDGE);
+        collapseButton.setForeground(Theme.TEXT_DIM);
+        expandButton.setForeground(Theme.TEXT_DIM);
+        rescale();                       // fonts and sizes, in every panel
+        if (last != null) {
+            update(last);
+        }
+        repaint();
     }
 
     /** Follow the window size: fonts and fixed sizes scale with it. */

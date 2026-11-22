@@ -42,6 +42,7 @@ public final class HistoryPopup {
         Window owner = SwingUtilities.getWindowAncestor(source);
         if (window == null || window.getOwner() != owner) {
             window = new JWindow(owner);
+            com.planesnomad.gui.ui.theme.Skin.makeTranslucent(window);
             canvas = new Canvas();
             window.setContentPane(canvas);
             window.setFocusableWindowState(false);
@@ -84,16 +85,12 @@ public final class HistoryPopup {
     public static void paint(Graphics2D g, HistoryEntry e, int w, int h) {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setColor(Theme.PANEL);
-        g.fillRect(0, 0, w, h);
+        com.planesnomad.gui.ui.theme.Skin.paint(g, "popup", 0, 0, w, h, e.byYou() ? Theme.YOU : Theme.ENEMY);
         layout(g, e, w, true);
-        g.setColor(e.byYou() ? Theme.YOU : Theme.ENEMY);
-        g.setStroke(new BasicStroke(Math.max(1.5f, Theme.px(2))));
-        g.drawRect(1, 1, w - 3, h - 3);
     }
 
     private static int layout(Graphics2D g, HistoryEntry e, int w, boolean draw) {
-        int pad = Theme.px(10);
+        int pad = Theme.px(Theme.pack().number("popup.padding", 10));
         int inner = w - 2 * pad;
         int y = pad;
 

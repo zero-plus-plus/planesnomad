@@ -45,6 +45,7 @@ public final class HistoryTest {
 
     public static void main(String[] args) throws Exception {
         CardDb db = ForgeEngine.initialize();
+        com.planesnomad.gui.ui.Theme.apply(com.planesnomad.gui.ui.theme.ThemePack.fromSystemProperty());
 
         // 1. A real AI-vs-AI match.
         List<MatchSnapshot> snaps = Collections.synchronizedList(new ArrayList<>());

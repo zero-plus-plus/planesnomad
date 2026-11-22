@@ -43,7 +43,6 @@ public final class BoardPanel extends JPanel {
     public BoardPanel(CardPreview preview) {
         super(new WeightedColumn());
         setOpaque(true);
-        setBackground(Theme.TABLE);
 
         enemyHand = new CardRow("Enemy hand", preview, true);
         enemyLands = new CardRow("Lands", preview, true);
@@ -134,21 +133,19 @@ public final class BoardPanel extends JPanel {
         super.paintComponent(g0);
         Graphics2D g = (Graphics2D) g0;
         // Each half: the player's playmat (darkened art), or the plain table color.
+        // Each half: the player's playmat, or the theme's table (element table.enemy / table.you).
         if (!playmatsOn || !Playmats.paint(g, enemyPlaymat, false, 0, 0, getWidth(), midlineY)) {
-            g.setColor(Theme.TABLE_ENEMY);
-            g.fillRect(0, 0, getWidth(), midlineY);
+            com.planesnomad.gui.ui.theme.Skin.paint(g, "table.enemy", 0, 0, getWidth(), midlineY);
         }
         if (!playmatsOn || !Playmats.paint(g, youPlaymat, true, 0, midlineY, getWidth(), getHeight() - midlineY)) {
-            g.setColor(Theme.TABLE);
-            g.fillRect(0, midlineY, getWidth(), getHeight() - midlineY);
+            com.planesnomad.gui.ui.theme.Skin.paint(g, "table.you", 0, midlineY, getWidth(), getHeight() - midlineY);
         }
         g.setColor(Theme.MIDLINE);
         g.setStroke(new BasicStroke(Math.max(1f, Theme.px(1.5))));
         g.drawLine(0, midlineY, getWidth(), midlineY);
         // Faint separator above your hand
         // Hands sit on a darker strip (translucent, so the playmat still shows through).
-        g.setColor(new java.awt.Color(0, 0, 0, 110));
-        g.fillRect(0, youHand.getY(), getWidth(), youHand.getHeight());
-        g.fillRect(0, enemyHand.getY(), getWidth(), enemyHand.getHeight());
+        com.planesnomad.gui.ui.theme.Skin.paint(g, "hand", 0, youHand.getY(), getWidth(), youHand.getHeight());
+        com.planesnomad.gui.ui.theme.Skin.paint(g, "hand", 0, enemyHand.getY(), getWidth(), enemyHand.getHeight());
     }
 }

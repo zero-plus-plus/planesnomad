@@ -39,6 +39,7 @@ public final class ScreenshotTool {
         out.mkdirs();
         String which = args.length > 1 ? args[1].toLowerCase() : "";
         CardDb db = ForgeEngine.initialize();
+        com.planesnomad.gui.ui.Theme.apply(com.planesnomad.gui.ui.theme.ThemePack.fromSystemProperty());
         images = ImageSetup.create();
         System.out.println("Card picture folders: " + images.folders());
         matchFactory = d -> TestMatches.create(which, d);

@@ -21,7 +21,21 @@ import java.awt.geom.RoundRectangle2D;
  */
 public final class HistoryIcons {
 
+    /** Theme key part for a kind: cast, ability, trigger, land, attack, block, death, exile, bounce, tokens, damage, gameEnd. */
+    public static String key(Kind kind) {
+        return switch (kind) {
+            case GAME_END -> "gameEnd";
+            default -> kind.name().toLowerCase(java.util.Locale.ROOT);
+        };
+    }
+
+    /** The disc color for a kind (theme: color.history.<kind>). */
     public static Color color(Kind kind) {
+        Color base = builtInColor(kind);
+        return com.planesnomad.gui.ui.Theme.pack().color("color.history." + key(kind), base);
+    }
+
+    private static Color builtInColor(Kind kind) {
         return switch (kind) {
             case CAST -> new Color(0x6C7A89);
             case ABILITY -> new Color(0x5B7FA6);
@@ -40,6 +54,16 @@ public final class HistoryIcons {
 
     /** Disc with the kind's symbol, size x size at (x, y). */
     public static void paint(Graphics2D g0, Kind kind, int x, int y, int size) {
+        // A theme can replace any symbol with a picture: icon.history.<kind>, e.g. icon.history.attack.
+        java.awt.image.BufferedImage custom = com.planesnomad.gui.ui.theme.Skin.icon("history." + key(kind));
+        if (custom != null) {
+            Graphics2D gi = (Graphics2D) g0.create();
+            gi.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            gi.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            gi.drawImage(custom, x, y, size, size, null);
+            gi.dispose();
+            return;
+        }
         Graphics2D g = (Graphics2D) g0.create();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setColor(new Color(0, 0, 0, 120));
