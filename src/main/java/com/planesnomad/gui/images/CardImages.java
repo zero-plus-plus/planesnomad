@@ -373,22 +373,34 @@ public final class CardImages {
         for (Path folder : folders) {
             List<Path> dirs = new ArrayList<>();
             if (!keyFolder.isEmpty()) {
-                dirs.add(folder.resolve(keyFolder));
+                addPath(dirs, folder, keyFolder);
             }
             String set = printing.setCode();
             if (set != null && !set.isEmpty() && !set.equals(keyFolder)) {
-                dirs.add(folder.resolve(set));
+                addPath(dirs, folder, set);
             }
             dirs.add(folder);
             for (Path dir : dirs) {
                 for (String name : names) {
                     for (String suffix : SUFFIXES) {
-                        out.add(dir.resolve(name + suffix));
+                        addPath(out, dir, name + suffix);
                     }
                 }
             }
         }
         return out;
+    }
+
+    /**
+     * Adds dir/name unless the file system can't name it (e.g. "?" or ":" on Windows, or "û"
+     * where the system encoding has no such character): that file can't exist, so skip it.
+     */
+    private static void addPath(List<Path> out, Path dir, String name) {
+        try {
+            out.add(dir.resolve(name));
+        } catch (java.nio.file.InvalidPathException e) {
+            // not a possible file name here
+        }
     }
 
     private static String lookupKey(CardSnapshot card) {

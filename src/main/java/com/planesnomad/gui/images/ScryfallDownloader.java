@@ -64,6 +64,15 @@ public final class ScryfallDownloader {
     private volatile boolean enabled = true;
     private long lastRequestAt;
     private int downloads;
+    /** After a "slow down" answer (429/503): no request before this time, across all threads. */
+    private long pausedUntil;
+    /** Current back-off; doubles on each "slow down" answer in a row, reset by a success. */
+    private long backoffMs;
+
+    /** Longest single back-off after repeated "slow down" answers. */
+    static final long MAX_BACKOFF_MS = 60_000;
+    /** Tries per picture when Scryfall asks us to slow down. */
+    private static final int ATTEMPTS = 3;
 
     public ScryfallDownloader(Path cacheRoot, BiFunction<CardSnapshot, Version, String> linkBuilder) {
         this.cacheRoot = cacheRoot;
@@ -184,31 +193,44 @@ public final class ScryfallDownloader {
             return null;
         }
         try {
-            waitForTurn();
-            HttpRequest request = HttpRequest.newBuilder(URI.create(BASE + link))
-                .header("User-Agent", USER_AGENT)
-                .header("Accept", "image/*,*/*;q=0.8")
-                .timeout(Duration.ofSeconds(30))
-                .GET()
-                .build();
-            Path tmp = Files.createTempFile("scryfall", ".part");
-            HttpResponse<Path> response = http.send(request, HttpResponse.BodyHandlers.ofFile(tmp));
-            String type = response.headers().firstValue("Content-Type").orElse("");
-            if (response.statusCode() != 200 || !type.startsWith("image/")) {
-                Files.deleteIfExists(tmp);
-                if (response.statusCode() == 404 || response.statusCode() == 422) {
-                    missing.add(link);   // Scryfall doesn't have it; don't ask again this session
-                } else {
-                    System.err.println("Scryfall " + response.statusCode() + " for " + link);
+            for (int attempt = 1; attempt <= ATTEMPTS; attempt++) {
+                waitForTurn();
+                HttpRequest request = HttpRequest.newBuilder(URI.create(BASE + link))
+                    .header("User-Agent", USER_AGENT)
+                    .header("Accept", "image/*,*/*;q=0.8")
+                    .timeout(Duration.ofSeconds(30))
+                    .GET()
+                    .build();
+                Path tmp = Files.createTempFile("scryfall", ".part");
+                HttpResponse<Path> response = http.send(request, HttpResponse.BodyHandlers.ofFile(tmp));
+                int status = response.statusCode();
+                String type = response.headers().firstValue("Content-Type").orElse("");
+                if (status == 429 || status == 503) {
+                    // "Too many requests" / "busy": pause all requests, then try again.
+                    Files.deleteIfExists(tmp);
+                    long wait = slowDown(response.headers().firstValue("Retry-After").orElse(null));
+                    System.err.println("Scryfall " + status + " for " + link + "; pausing downloads for "
+                        + wait + " ms (try " + attempt + " of " + ATTEMPTS + ")");
+                    continue;
                 }
-                return null;
+                if (status != 200 || !type.startsWith("image/")) {
+                    Files.deleteIfExists(tmp);
+                    if (status == 404 || status == 422) {
+                        missing.add(link);   // Scryfall doesn't have it; don't ask again this session
+                    } else {
+                        System.err.println("Scryfall " + status + " for " + link);
+                    }
+                    return null;
+                }
+                Files.createDirectories(target.getParent());
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+                synchronized (this) {
+                    downloads++;
+                    backoffMs = 0;
+                }
+                return target;
             }
-            Files.createDirectories(target.getParent());
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
-            synchronized (this) {
-                downloads++;
-            }
-            return target;
+            return null;   // still refused; a later request may try again after the pause
         } catch (IOException e) {
             System.err.println("Scryfall download failed for " + link + ": " + e.getMessage());
             return null;
@@ -218,9 +240,33 @@ public final class ScryfallDownloader {
         }
     }
 
-    /** Keeps requests at least MIN_INTERVAL_MS apart, across all threads. */
+    /**
+     * Scryfall asked us to slow down: pause every request for Retry-After seconds if given,
+     * else 1 s, doubling while refusals continue (at most MAX_BACKOFF_MS).
+     * @return the pause in milliseconds
+     */
+    synchronized long slowDown(String retryAfter) {
+        backoffMs = backoffMs == 0 ? 1000 : Math.min(MAX_BACKOFF_MS, backoffMs * 2);
+        long wait = backoffMs;
+        if (retryAfter != null) {
+            try {
+                wait = Math.max(wait, Math.min(MAX_BACKOFF_MS, Long.parseLong(retryAfter.trim()) * 1000));
+            } catch (NumberFormatException ignored) {
+                // an HTTP date instead of seconds: keep our own back-off
+            }
+        }
+        pausedUntil = Math.max(pausedUntil, System.currentTimeMillis() + wait);
+        return wait;
+    }
+
+    /** Milliseconds until requests may resume (0 if not paused); for tests. */
+    synchronized long pausedFor() {
+        return Math.max(0, pausedUntil - System.currentTimeMillis());
+    }
+
+    /** Keeps requests at least MIN_INTERVAL_MS apart and honours a pause, across all threads. */
     private synchronized void waitForTurn() throws InterruptedException {
-        long wait = lastRequestAt + MIN_INTERVAL_MS - System.currentTimeMillis();
+        long wait = Math.max(lastRequestAt + MIN_INTERVAL_MS, pausedUntil) - System.currentTimeMillis();
         if (wait > 0) {
             Thread.sleep(wait);
         }

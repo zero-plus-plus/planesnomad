@@ -135,6 +135,18 @@ public final class CardImagesTest {
         // Hidden cards never get a picture.
         check("Hidden cards have no picture", images.full(CardSnapshot.hidden(1), 63, 88) == null);
 
+        // A name the file system can't use (here a NUL character, invalid everywhere; on Windows
+        // also "?" or ":"): no picture and no crash, the text frame is drawn.
+        CardSnapshot odd = new CardSnapshot(-7, "Bad\u0000Name?", "M10", "1", "R", "{R}", "Instant", "",
+            null, null, 0, false, false, false, false, false, false, false, false, "M10/Bad\u0000Name?.full", 1, "normal");
+        boolean oddOk;
+        try {
+            oddOk = !images.hasImage(odd) && images.full(odd, 63, 88) == null;
+        } catch (RuntimeException e) {
+            oddOk = false;
+        }
+        check("A card name that can't be a file name gets no picture, without an error", oddOk);
+
         // Symbols: Forge keeps them next to the card pictures (pics/symbols beside pics/cards).
         Path symbols = pictures.toAbsolutePath().normalize().getParent().resolve("symbols");
         ManaSymbols.setFolder(symbols);

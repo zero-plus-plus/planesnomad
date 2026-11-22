@@ -73,6 +73,19 @@ public final class ScryfallTest {
                 + " downloads in " + elapsed + " ms)",
             fetched == names.length && elapsed >= (names.length - 1) * ScryfallDownloader.MIN_INTERVAL_MS);
 
+        // 2b. "Too many requests": back off (no network needed for these)
+        ScryfallDownloader slow = new ScryfallDownloader(cache, ImageSetup::scryfallLink);
+        long b1 = slow.slowDown(null);
+        long b2 = slow.slowDown(null);
+        check("A 429 without Retry-After pauses 1 s, doubling while refusals continue (" + b1 + ", " + b2 + " ms)",
+            b1 == 1000 && b2 == 2000 && slow.pausedFor() > 1000);
+        check("Retry-After is honoured (Retry-After: 7 -> " + slow.slowDown("7") + " ms)", slow.pausedFor() > 6000);
+        for (int i = 0; i < 10; i++) {
+            slow.slowDown("3600");
+        }
+        check("The pause is capped at " + ScryfallDownloader.MAX_BACKOFF_MS + " ms (" + slow.pausedFor() + " ms)",
+            slow.pausedFor() <= ScryfallDownloader.MAX_BACKOFF_MS);
+
         // 3. Missing pictures are remembered; disabled downloads fetch nothing
         ScryfallDownloader bogus = new ScryfallDownloader(cache, (c, v) -> "2ED/99999/en?format=image&version=normal");
         check("A picture Scryfall doesn't have returns nothing", bogus.fetchNow(vivien, ScryfallDownloader.Version.NORMAL) == null);
