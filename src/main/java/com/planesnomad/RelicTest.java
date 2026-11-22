@@ -43,10 +43,10 @@ import java.util.regex.Pattern;
  */
 public class RelicTest {
 
-    static final String PASSIVE = "Ember Charm";
-    static final String TRIGGERED = "Wayfarer's Compass";
-    static final String ACTIVATED = "Tinker's Lens";
-    static final String CONSUMABLE = "Flask of Embers";
+    public static final String PASSIVE = "Ember Charm";
+    public static final String TRIGGERED = "Wayfarer's Compass";
+    public static final String ACTIVATED = "Tinker's Lens";
+    public static final String CONSUMABLE = "Flask of Embers";
 
     private static final int MATCHES = 3;
 

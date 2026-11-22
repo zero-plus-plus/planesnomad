@@ -118,7 +118,7 @@ public class PlanesnomadGame {
     }
 
     /** Test deck: red burn and goblins. */
-    static Deck buildRedDeck(CardDb database) {
+    public static Deck buildRedDeck(CardDb database) {
         Deck deck = new Deck("Planesnomad - Red");
         addCards(deck, database, "Shock", "10E", "232", 4);
         addCards(deck, database, "Lightning Bolt", "M10", "146", 4);
@@ -129,7 +129,7 @@ public class PlanesnomadGame {
     }
 
     /** Test deck: blue counters, bounce and merfolk. */
-    static Deck buildBlueDeck(CardDb database) {
+    public static Deck buildBlueDeck(CardDb database) {
         Deck deck = new Deck("Planesnomad - Blue");
         addCards(deck, database, "Counterspell", "7ED", "68", 4);
         addCards(deck, database, "Unsummon", "10E", "117", 4);
@@ -139,7 +139,7 @@ public class PlanesnomadGame {
         return deck;
     }
 
-    static LobbyPlayerAi createAi(String name) {
+    public static LobbyPlayerAi createAi(String name) {
         LobbyPlayerAi ai = new LobbyPlayerAi(name, Set.of());
         ai.setAiProfile(ForgeEngine.DEFAULT_AI_PROFILE);
         return ai;

@@ -1,0 +1,585 @@
+package com.planesnomad.gui.images;
+
+import com.planesnomad.gui.model.CardSnapshot;
+
+import javax.imageio.ImageIO;
+import java.awt.Graphics2D;
+import java.awt.Image;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Function;
+
+/**
+ * Finds, loads and scales card pictures from local folders. Images are never bundled with the
+ * game: these folders are the player's own (e.g. Forge's picture cache, or our download cache).
+ *
+ * File lookup follows Forge's picture cache naming, using the card's Forge image key
+ * (e.g. "U/Shivan Dragon.full", "U/Mountain2.full"). For each folder, in order:
+ *   1. {folder}/{key folder}/{name}.fullborder.jpg   (also .full.jpg, .jpg, .png)
+ *   2. {folder}/{set code}/{name}...                 (set code instead of Forge's short code)
+ *   3. {folder}/{name}...                            (flat folder, e.g. a handful of test images)
+ *
+ * If the card's own printing has no picture, any other printing of the same card is used
+ * (newest set first, regular printings before alternate arts); the art crop then follows the
+ * printing actually shown.
+ *
+ * Loading runs on a background thread; until a picture is ready the caller gets null and
+ * draws the text frame. Listeners are told when new pictures arrive, so the screen repaints.
+ */
+public final class CardImages {
+
+    private static final String[] SUFFIXES = {".fullborder.jpg", ".full.jpg", ".jpg", ".png"};
+    private static final int MAX_ORIGINALS = 400;
+    private static final int MAX_SCALED = 900;
+
+    private final List<Path> folders;
+    private final ArtCrops crops;
+    private final ExecutorService loader = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "card-images");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Loaded originals by file path; Optional.empty() = looked for and not found. */
+    private final Map<String, Optional<Loaded>> originals = lru(MAX_ORIGINALS);
+    private final Map<String, Image> scaled = lru(MAX_SCALED);
+    private final Set<String> pending = Collections.synchronizedSet(new HashSet<>());
+    private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
+
+    /** A loaded picture and the art crop box for the printing it shows (if known). */
+    private record Loaded(BufferedImage image, ArtCrops.Box artBox) { }
+
+    /**
+     * One printing of a card, enough to find its picture and choose its crop box.
+     * @param imageKey Forge image key, e.g. "U/Shivan Dragon.full"
+     */
+    public record Printing(String setCode, String imageKey, int artIndex) { }
+
+    /** Optional Scryfall downloads (null = local folders only). */
+    private ScryfallDownloader scryfall;
+    /** Scryfall art crops by card key; Optional.empty() = looked for and not cached. */
+    private final Map<String, Optional<BufferedImage>> scryfallArt = lru(MAX_ORIGINALS);
+
+    /** Other printings of a card by name, in preference order; empty if none are known. */
+    private Function<String, List<Printing>> otherPrintings = name -> List.of();
+
+    public CardImages(List<Path> folders, ArtCrops crops) {
+        this.folders = List.copyOf(folders);
+        this.crops = crops;
+    }
+
+    public List<Path> folders() {
+        return folders;
+    }
+
+    /**
+     * Use Scryfall for pictures the player doesn't have and for exact art crops (null = off).
+     */
+    public void setScryfall(ScryfallDownloader downloader) {
+        scryfall = downloader;
+    }
+
+    public ScryfallDownloader scryfall() {
+        return scryfall;
+    }
+
+    /** Forget what was looked up for this card, so the next request looks again (after a download). */
+    private void forget(CardSnapshot card) {
+        String key = lookupKey(card);
+        synchronized (originals) {
+            originals.remove(key);
+        }
+        synchronized (scryfallArt) {
+            scryfallArt.remove(key);
+        }
+        synchronized (scaled) {
+            scaled.keySet().removeIf(k -> k.startsWith(key + "|"));
+        }
+        listeners.forEach(Runnable::run);
+    }
+
+    /** Where to find other printings of a card (by name) when its own printing has no picture. */
+    public void setOtherPrintings(Function<String, List<Printing>> source) {
+        otherPrintings = source == null ? name -> List.of() : source;
+    }
+
+    public void addListener(Runnable onNewImages) {
+        listeners.add(onNewImages);
+    }
+
+    /** The full card picture scaled to w x h, or null if none (yet). */
+    public Image full(CardSnapshot card, int w, int h) {
+        Loaded loaded = get(card);
+        if (loaded == null || w <= 0 || h <= 0) {
+            return null;
+        }
+        return scaledCopy(lookupKey(card) + "|full|" + w + "x" + h, loaded.image(), w, h);
+    }
+
+    /** The card's art (crop box for its set) scaled to w x h, or null if no picture or no crop box. */
+    public Image art(CardSnapshot card, int w, int h) {
+        if (card == null || w <= 0 || h <= 0) {
+            return null;
+        }
+        // 1. Scryfall's own art crop: exact for every frame and layout.
+        BufferedImage exact = scryfallArt(card);
+        if (exact != null) {
+            return scaledCopy(lookupKey(card) + "|sfart|" + w + "x" + h,
+                coverCrop(exact, 0, 0, exact.getWidth(), exact.getHeight(), w, h), w, h);
+        }
+        // 2. Our crop box on the full picture (until the exact crop has been downloaded).
+        Loaded loaded = get(card);
+        if (loaded == null || loaded.artBox() == null) {
+            return null;
+        }
+        BufferedImage src = loaded.image();
+        ArtCrops.Box b = loaded.artBox();
+        int x1 = (int) Math.round(b.left() * src.getWidth());
+        int y1 = (int) Math.round(b.top() * src.getHeight());
+        int x2 = (int) Math.round(b.right() * src.getWidth());
+        int y2 = (int) Math.round(b.bottom() * src.getHeight());
+        return scaledCopy(lookupKey(card) + "|art|" + w + "x" + h, coverCrop(src, x1, y1, x2, y2, w, h), w, h);
+    }
+
+    /** The part of (x1,y1)-(x2,y2) that fills w x h without distortion (centred). */
+    private static BufferedImage coverCrop(BufferedImage src, int x1, int y1, int x2, int y2, int w, int h) {
+        // Fill w x h without distortion: cut the centre of the art box to the target's proportions.
+        double target = w / (double) h;
+        int bw = x2 - x1;
+        int bh = y2 - y1;
+        if (bw / (double) bh > target) {
+            int nw = (int) Math.round(bh * target);
+            x1 += (bw - nw) / 2;
+            bw = nw;
+        } else {
+            int nh = (int) Math.round(bw / target);
+            y1 += (bh - nh) / 2;
+            bh = nh;
+        }
+        return src.getSubimage(x1, y1, Math.max(1, bw), Math.max(1, bh));
+    }
+
+    /** The cached Scryfall art crop for this card, or null (and a background download is queued). */
+    private BufferedImage scryfallArt(CardSnapshot card) {
+        if (scryfall == null || card.isHidden() || card.faceDown() || card.name().isEmpty()) {
+            return null;
+        }
+        String key = lookupKey(card);
+        synchronized (scryfallArt) {
+            Optional<BufferedImage> known = scryfallArt.get(key);
+            if (known != null) {
+                return known.orElse(null);
+            }
+        }
+        BufferedImage img = null;
+        Path file = scryfall.cached(card, ScryfallDownloader.Version.ART_CROP);
+        if (file != null) {
+            try {
+                img = ImageIO.read(file.toFile());
+            } catch (IOException e) {
+                System.err.println("Could not read " + file + ": " + e.getMessage());
+            }
+        } else {
+            scryfall.request(card, ScryfallDownloader.Version.ART_CROP, () -> forget(card));
+        }
+        synchronized (scryfallArt) {
+            scryfallArt.put(key, Optional.ofNullable(img));
+        }
+        return img;
+    }
+
+    /** True if a picture exists for this card (loads it now, on the calling thread). */
+    public boolean hasImage(CardSnapshot card) {
+        return loadNow(card) != null;
+    }
+
+    /** Loads pictures for these cards right away (used by tests and screenshots). */
+    public void preloadNow(Collection<CardSnapshot> cards) {
+        for (CardSnapshot c : cards) {
+            loadNow(c);
+        }
+    }
+
+    /** Queues background loading for these cards (e.g. both decks at match start). */
+    public void prefetch(Collection<CardSnapshot> cards) {
+        for (CardSnapshot c : cards) {
+            get(c);
+        }
+    }
+
+    // ------------------------------------------------------------------ loading
+
+    private Loaded get(CardSnapshot card) {
+        if (card == null || card.isHidden() || card.faceDown() || card.name().isEmpty()) {
+            return null;
+        }
+        String key = lookupKey(card);
+        synchronized (originals) {
+            Optional<Loaded> known = originals.get(key);
+            if (known != null) {
+                return known.orElse(null);
+            }
+        }
+        if (pending.add(key)) {
+            loader.submit(() -> {
+                try {
+                    loadNow(card);
+                } finally {
+                    pending.remove(key);
+                }
+                listeners.forEach(Runnable::run);
+            });
+        }
+        return null;
+    }
+
+    private Loaded loadNow(CardSnapshot card) {
+        if (card == null || card.isHidden() || card.name().isEmpty()) {
+            return null;
+        }
+        String key = lookupKey(card);
+        synchronized (originals) {
+            Optional<Loaded> known = originals.get(key);
+            if (known != null) {
+                return known.orElse(null);
+            }
+        }
+        if (isTokenKey(card.imageKey())) {
+            Loaded token = loadToken(card.imageKey());
+            synchronized (originals) {
+                originals.put(key, Optional.ofNullable(token));
+            }
+            return token;
+        }
+        Loaded loaded = loadPrinting(card, new Printing(card.setCode(), card.imageKey(), card.artIndex()));
+        if (loaded == null) {
+            loaded = loadScryfallPicture(card);
+        }
+        if (loaded == null) {
+            for (Printing other : otherPrintings.apply(card.name())) {
+                if (other.imageKey() != null && other.imageKey().equals(card.imageKey())) {
+                    continue;
+                }
+                loaded = loadPrinting(card, other);
+                if (loaded != null) {
+                    break;
+                }
+            }
+        }
+        if (loaded == null && scryfall != null) {
+            // Nothing on this computer: download the exact printing in the background.
+            scryfall.request(card, ScryfallDownloader.Version.NORMAL, () -> forget(card));
+        }
+        synchronized (originals) {
+            originals.put(key, Optional.ofNullable(loaded));
+        }
+        return loaded;
+    }
+
+    /** The exact printing's picture from the Scryfall cache, if it was downloaded before. */
+    private Loaded loadScryfallPicture(CardSnapshot card) {
+        if (scryfall == null) {
+            return null;
+        }
+        Path file = scryfall.cached(card, ScryfallDownloader.Version.NORMAL);
+        if (file == null) {
+            return null;
+        }
+        try {
+            BufferedImage img = ImageIO.read(file.toFile());
+            if (img == null) {
+                return null;
+            }
+            boolean basicLand = card.typeLine() != null && card.typeLine().contains("Basic");
+            ArtCrops.Box box = crops.find(card.setCode(), keyFolder(card.imageKey()), card.layout(),
+                card.artIndex(), basicLand).orElse(null);
+            return new Loaded(img, box);
+        } catch (IOException e) {
+            System.err.println("Could not read " + file + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Tests and screenshots: load pictures now, downloading from Scryfall on this thread whatever
+     * isn't on this computer (full pictures and art crops).
+     */
+    public void preloadWithDownloads(Collection<CardSnapshot> cards) {
+        for (CardSnapshot c : cards) {
+            if (scryfall != null && c != null && !c.isHidden() && !c.name().isEmpty()) {
+                if (loadNow(c) == null) {
+                    scryfall.fetchNow(c, ScryfallDownloader.Version.NORMAL);
+                }
+                scryfall.fetchNow(c, ScryfallDownloader.Version.ART_CROP);
+                String key = lookupKey(c);
+                synchronized (originals) {
+                    originals.remove(key);
+                }
+                synchronized (scryfallArt) {
+                    scryfallArt.remove(key);
+                }
+            }
+            loadNow(c);
+        }
+    }
+
+    // ------------------------------------------------------------------ tokens
+
+    static boolean isTokenKey(String key) {
+        return key != null && key.startsWith("t:");
+    }
+
+    /** Script -> token pictures of any printing, per token folder (built on first use). */
+    private final Map<Path, Map<String, List<Path>>> tokenIndex = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Token folders, as in Forge's picture cache: "pics/tokens" next to "pics/cards", or a
+     * "tokens" folder inside a picture folder.
+     */
+    List<Path> tokenFolders() {
+        List<Path> out = new ArrayList<>();
+        for (Path folder : folders) {
+            Path parent = folder.toAbsolutePath().getParent();
+            for (Path t : new Path[] {folder.resolve("tokens"), parent == null ? null : parent.resolve("tokens")}) {
+                if (t != null && Files.isDirectory(t) && !out.contains(t.normalize())) {
+                    out.add(t.normalize());
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A token's picture: the exact printing ("<tokens>/<SET>/<number>_<script>.jpg", Forge's
+     * naming), else the same token from any other set. Tokens have no art crop box.
+     */
+    private Loaded loadToken(String key) {
+        String[] parts = key.substring(2).split("\\|");
+        String script = parts[0];
+        String set = parts.length > 1 ? parts[1] : "";
+        String number = parts.length > 2 ? parts[2] : "";
+        for (Path file : tokenCandidates(script, set, number)) {
+            try {
+                BufferedImage img = ImageIO.read(file.toFile());
+                if (img != null) {
+                    return new Loaded(img, null);
+                }
+            } catch (IOException e) {
+                System.err.println("Could not read token image " + file + ": " + e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    /** Existing token picture files for this token, best first. */
+    List<Path> tokenCandidates(String script, String set, String number) {
+        List<Path> out = new ArrayList<>();
+        for (Path tokens : tokenFolders()) {
+            List<Path> exact = new ArrayList<>();
+            if (!set.isEmpty()) {
+                if (!number.isEmpty()) {
+                    addPath(exact, tokens.resolve(set), number + "_" + script + ".jpg");
+                    addPath(exact, tokens.resolve(set), number + "_" + script + ".png");
+                }
+                addPath(exact, tokens.resolve(set), script + ".jpg");
+            }
+            addPath(exact, tokens, script + ".jpg");
+            for (Path p : exact) {
+                if (Files.isRegularFile(p) && !out.contains(p)) {
+                    out.add(p);
+                }
+            }
+        }
+        for (Path tokens : tokenFolders()) {
+            for (Path p : tokenIndex.computeIfAbsent(tokens, CardImages::indexTokens).getOrDefault(script, List.of())) {
+                if (!out.contains(p)) {
+                    out.add(p);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** "<tokens>/<SET>/<number>_<script>.jpg" or "<script>.jpg" -> script (fixed order: by path). */
+    private static Map<String, List<Path>> indexTokens(Path tokens) {
+        Map<String, List<Path>> index = new java.util.HashMap<>();
+        try (java.util.stream.Stream<Path> files = Files.walk(tokens, 2)) {
+            files.filter(Files::isRegularFile).sorted(java.util.Comparator.reverseOrder()).forEach(f -> {
+                String name = f.getFileName().toString();
+                int dot = name.lastIndexOf('.');
+                if (dot < 0) {
+                    return;
+                }
+                String base = name.substring(0, dot);
+                String script = base.matches("\\d+[a-z]?_.*") ? base.substring(base.indexOf('_') + 1) : base;
+                index.computeIfAbsent(script, k -> new ArrayList<>()).add(f);
+            });
+        } catch (IOException e) {
+            System.err.println("Could not list token pictures in " + tokens + ": " + e.getMessage());
+        }
+        return index;
+    }
+
+    /** Loads the picture of one printing of the card, with that printing's crop box. */
+    private Loaded loadPrinting(CardSnapshot card, Printing printing) {
+        for (Path file : candidates(card, printing)) {
+            if (!Files.isRegularFile(file)) {
+                continue;
+            }
+            try {
+                BufferedImage img = ImageIO.read(file.toFile());
+                if (img != null) {
+                    // The crop box follows the printing shown. In a flat folder the file's printing
+                    // isn't certain, but the lookup was for this printing.
+                    boolean basicLand = card.typeLine() != null && card.typeLine().contains("Basic");
+                    ArtCrops.Box box = crops.find(printing.setCode(), keyFolder(printing.imageKey()),
+                        card.layout(), printing.artIndex(), basicLand).orElse(null);
+                    return new Loaded(img, box);
+                }
+            } catch (IOException e) {
+                System.err.println("Could not read card image " + file + ": " + e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    /** Where to look for the card's own printing's picture, most specific first. */
+    List<Path> candidates(CardSnapshot card) {
+        return candidates(card, new Printing(card.setCode(), card.imageKey(), card.artIndex()));
+    }
+
+    /** Where to look for one printing's picture, most specific first. */
+    List<Path> candidates(CardSnapshot card, Printing printing) {
+        String keyFolder = keyFolder(printing.imageKey());
+        String keyName = keyName(printing.imageKey(), card.name());
+        List<String> names = new ArrayList<>();
+        names.add(keyName);
+        String plain = safe(card.name());
+        if (!plain.equals(keyName)) {
+            names.add(plain);
+        }
+        List<Path> out = new ArrayList<>();
+        for (Path folder : folders) {
+            List<Path> dirs = new ArrayList<>();
+            if (!keyFolder.isEmpty()) {
+                addPath(dirs, folder, keyFolder);
+            }
+            String set = printing.setCode();
+            if (set != null && !set.isEmpty() && !set.equals(keyFolder)) {
+                addPath(dirs, folder, set);
+            }
+            dirs.add(folder);
+            for (Path dir : dirs) {
+                for (String name : names) {
+                    for (String suffix : SUFFIXES) {
+                        addPath(out, dir, name + suffix);
+                    }
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Adds dir/name unless the file system can't name it (e.g. "?" or ":" on Windows, or "û"
+     * where the system encoding has no such character): that file can't exist, so skip it.
+     */
+    private static void addPath(List<Path> out, Path dir, String name) {
+        try {
+            out.add(dir.resolve(name));
+        } catch (java.nio.file.InvalidPathException e) {
+            // not a possible file name here
+        }
+    }
+
+    private static String lookupKey(CardSnapshot card) {
+        return card.imageKey() == null || card.imageKey().isEmpty()
+            ? card.setCode() + "/" + card.name() : card.imageKey();
+    }
+
+    /** "U/Shivan Dragon.full" -> "U". */
+    private static String keyFolder(String key) {
+        if (key == null) {
+            return "";
+        }
+        int slash = key.indexOf('/');
+        return slash > 0 ? key.substring(0, slash) : "";
+    }
+
+    /** "U/Mountain2.full" -> "Mountain2"; the card name if there is no key. */
+    private static String keyName(String key, String cardName) {
+        if (key == null || key.isEmpty()) {
+            return safe(cardName);
+        }
+        String name = key.substring(key.indexOf('/') + 1);
+        return name.endsWith(".full") ? name.substring(0, name.length() - 5) : name;
+    }
+
+    /** Characters Windows does not allow in file names are dropped, as Forge does. */
+    private static String safe(String name) {
+        return name.replace("//", "").replaceAll("[\\\\/:*?\"<>|]", "").trim();
+    }
+
+    // ------------------------------------------------------------------ scaling
+
+    private Image scaledCopy(String cacheKey, BufferedImage src, int w, int h) {
+        synchronized (scaled) {
+            Image hit = scaled.get(cacheKey);
+            if (hit != null) {
+                return hit;
+            }
+        }
+        Image result = highQualityScale(src, w, h);
+        synchronized (scaled) {
+            scaled.put(cacheKey, result);
+        }
+        return result;
+    }
+
+    /** Halves the image step by step before the final resize, which looks much better than one big jump. */
+    static BufferedImage highQualityScale(BufferedImage src, int w, int h) {
+        BufferedImage current = src;
+        int cw = src.getWidth();
+        int ch = src.getHeight();
+        while (cw / 2 >= w && ch / 2 >= h) {
+            cw /= 2;
+            ch /= 2;
+            current = resize(current, cw, ch);
+        }
+        return resize(current, w, h);
+    }
+
+    private static BufferedImage resize(BufferedImage src, int w, int h) {
+        BufferedImage out = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        g.drawImage(src, 0, 0, w, h, null);
+        g.dispose();
+        return out;
+    }
+
+    private static <K, V> Map<K, V> lru(int max) {
+        return new LinkedHashMap<>(64, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
+                return size() > max;
+            }
+        };
+    }
+}
