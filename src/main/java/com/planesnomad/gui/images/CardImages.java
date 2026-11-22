@@ -259,6 +259,13 @@ public final class CardImages {
                 return known.orElse(null);
             }
         }
+        if (isTokenKey(card.imageKey())) {
+            Loaded token = loadToken(card.imageKey());
+            synchronized (originals) {
+                originals.put(key, Optional.ofNullable(token));
+            }
+            return token;
+        }
         Loaded loaded = loadPrinting(card, new Printing(card.setCode(), card.imageKey(), card.artIndex()));
         if (loaded == null) {
             loaded = loadScryfallPicture(card);
@@ -329,6 +336,103 @@ public final class CardImages {
             }
             loadNow(c);
         }
+    }
+
+    // ------------------------------------------------------------------ tokens
+
+    static boolean isTokenKey(String key) {
+        return key != null && key.startsWith("t:");
+    }
+
+    /** Script -> token pictures of any printing, per token folder (built on first use). */
+    private final Map<Path, Map<String, List<Path>>> tokenIndex = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Token folders, as in Forge's picture cache: "pics/tokens" next to "pics/cards", or a
+     * "tokens" folder inside a picture folder.
+     */
+    List<Path> tokenFolders() {
+        List<Path> out = new ArrayList<>();
+        for (Path folder : folders) {
+            Path parent = folder.toAbsolutePath().getParent();
+            for (Path t : new Path[] {folder.resolve("tokens"), parent == null ? null : parent.resolve("tokens")}) {
+                if (t != null && Files.isDirectory(t) && !out.contains(t.normalize())) {
+                    out.add(t.normalize());
+                }
+            }
+        }
+        return out;
+    }
+
+    /**
+     * A token's picture: the exact printing ("<tokens>/<SET>/<number>_<script>.jpg", Forge's
+     * naming), else the same token from any other set. Tokens have no art crop box.
+     */
+    private Loaded loadToken(String key) {
+        String[] parts = key.substring(2).split("\\|");
+        String script = parts[0];
+        String set = parts.length > 1 ? parts[1] : "";
+        String number = parts.length > 2 ? parts[2] : "";
+        for (Path file : tokenCandidates(script, set, number)) {
+            try {
+                BufferedImage img = ImageIO.read(file.toFile());
+                if (img != null) {
+                    return new Loaded(img, null);
+                }
+            } catch (IOException e) {
+                System.err.println("Could not read token image " + file + ": " + e.getMessage());
+            }
+        }
+        return null;
+    }
+
+    /** Existing token picture files for this token, best first. */
+    List<Path> tokenCandidates(String script, String set, String number) {
+        List<Path> out = new ArrayList<>();
+        for (Path tokens : tokenFolders()) {
+            List<Path> exact = new ArrayList<>();
+            if (!set.isEmpty()) {
+                if (!number.isEmpty()) {
+                    addPath(exact, tokens.resolve(set), number + "_" + script + ".jpg");
+                    addPath(exact, tokens.resolve(set), number + "_" + script + ".png");
+                }
+                addPath(exact, tokens.resolve(set), script + ".jpg");
+            }
+            addPath(exact, tokens, script + ".jpg");
+            for (Path p : exact) {
+                if (Files.isRegularFile(p) && !out.contains(p)) {
+                    out.add(p);
+                }
+            }
+        }
+        for (Path tokens : tokenFolders()) {
+            for (Path p : tokenIndex.computeIfAbsent(tokens, CardImages::indexTokens).getOrDefault(script, List.of())) {
+                if (!out.contains(p)) {
+                    out.add(p);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** "<tokens>/<SET>/<number>_<script>.jpg" or "<script>.jpg" -> script (fixed order: by path). */
+    private static Map<String, List<Path>> indexTokens(Path tokens) {
+        Map<String, List<Path>> index = new java.util.HashMap<>();
+        try (java.util.stream.Stream<Path> files = Files.walk(tokens, 2)) {
+            files.filter(Files::isRegularFile).sorted(java.util.Comparator.reverseOrder()).forEach(f -> {
+                String name = f.getFileName().toString();
+                int dot = name.lastIndexOf('.');
+                if (dot < 0) {
+                    return;
+                }
+                String base = name.substring(0, dot);
+                String script = base.matches("\\d+[a-z]?_.*") ? base.substring(base.indexOf('_') + 1) : base;
+                index.computeIfAbsent(script, k -> new ArrayList<>()).add(f);
+            });
+        } catch (IOException e) {
+            System.err.println("Could not list token pictures in " + tokens + ": " + e.getMessage());
+        }
+        return index;
     }
 
     /** Loads the picture of one printing of the card, with that printing's crop box. */

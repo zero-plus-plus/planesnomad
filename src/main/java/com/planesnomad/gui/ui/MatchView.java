@@ -71,6 +71,13 @@ public final class MatchView extends JPanel {
     };
     private boolean rememberStackPosition;
     private KeyEventDispatcher tabDispatcher;
+    /** Setting: the large card view shows while Q is held (true, default) or toggles on each press. */
+    private boolean holdForLarge = true;
+    /** Closes the large view shortly after Q is released, unless it's pressed again (auto-repeat). */
+    private final javax.swing.Timer largeRelease = new javax.swing.Timer(60, e -> preview.closeLarge());
+    {
+        largeRelease.setRepeats(false);
+    }
 
     // Right column (stack + log): resizable with a divider, collapsible to a thin strip.
     private final JPanel rightColumn = new JPanel(new BorderLayout());
@@ -157,12 +164,28 @@ public final class MatchView extends JPanel {
     }
 
     private void installKeys() {
+        // Q: hold to see the card large (default), or press to open / press again to close (setting).
         getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-            .put(KeyStroke.getKeyStroke(LARGE_PREVIEW_KEY, 0), "largePreview");
+            .put(KeyStroke.getKeyStroke(LARGE_PREVIEW_KEY, 0, false), "largePreview");
         getActionMap().put("largePreview", new AbstractAction() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                preview.toggleLarge(SwingUtilities.getWindowAncestor(MatchView.this));
+                largeRelease.stop();   // key auto-repeat on some systems sends release + press pairs
+                if (holdForLarge) {
+                    preview.openLarge(SwingUtilities.getWindowAncestor(MatchView.this));
+                } else {
+                    preview.toggleLarge(SwingUtilities.getWindowAncestor(MatchView.this));
+                }
+            }
+        });
+        getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+            .put(KeyStroke.getKeyStroke(LARGE_PREVIEW_KEY, 0, true), "largePreviewReleased");
+        getActionMap().put("largePreviewReleased", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (holdForLarge) {
+                    largeRelease.restart();
+                }
             }
         });
         getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
@@ -363,6 +386,20 @@ public final class MatchView extends JPanel {
     /** Setting: pile identical lands without the default limit of three per pile. */
     public void setStackLandsFully(boolean on) {
         board.setStackLandsFully(on);
+    }
+
+    /** Setting: hold Q for the large card view (default), or press Q to open and again to close. */
+    public void setHoldForLargeView(boolean hold) {
+        holdForLarge = hold;
+    }
+
+    public boolean isHoldForLargeView() {
+        return holdForLarge;
+    }
+
+    /** Setting: different arts of the same card in separate piles (default: together). */
+    public void setSeparateArts(boolean on) {
+        board.setSeparateArts(on);
     }
 
     public BoardPanel board() {

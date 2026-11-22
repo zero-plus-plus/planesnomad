@@ -68,7 +68,11 @@ public final class MatchViewerApp {
             @Override
             public void setRevealEnemyHand(boolean value) {
                 revealEnemyHand = value;
-                if (runner != null) runner.setRevealEnemyHand(value);
+                if (testDecks.equals("boards")) {
+                    showBoard(currentBoard);   // frozen board: rebuild it with the hand face up/down
+                } else if (runner != null) {
+                    runner.setRevealEnemyHand(value);
+                }
             }
 
             @Override
@@ -125,7 +129,7 @@ public final class MatchViewerApp {
         frame.setTitle("Planesnomad - test board: " + name + " (building...)");
         Thread t = new Thread(() -> {
             try {
-                var snap = StressTest.board(db, images, name);
+                var snap = StressTest.board(db, images, name, revealEnemyHand);
                 SwingUtilities.invokeLater(() -> {
                     view.update(snap);
                     frame.setTitle("Planesnomad - test board: " + name + " (frozen, no play)");
@@ -176,13 +180,20 @@ public final class MatchViewerApp {
         JCheckBoxMenuItem lands = new JCheckBoxMenuItem("Stack identical lands beyond 3 per pile", false);
         lands.addActionListener(e -> view.setStackLandsFully(lands.isSelected()));
         settings.add(lands);
+        JCheckBoxMenuItem arts = new JCheckBoxMenuItem("Keep different arts of a card in separate piles", false);
+        arts.addActionListener(e -> view.setSeparateArts(arts.isSelected()));
+        settings.add(arts);
         JCheckBoxMenuItem column = new JCheckBoxMenuItem("Show stack & log column", true);
         column.addActionListener(e -> view.setStackColumnCollapsed(!column.isSelected()));
         view.onStackColumnChanged(() -> column.setSelected(!view.isStackColumnCollapsed()));
         settings.add(column);
         settings.add(downloads);
         settings.addSeparator();
-        JMenuItem hint = new JMenuItem("Large card view: point at a card and press Q (Esc closes)");
+        JCheckBoxMenuItem qToggle = new JCheckBoxMenuItem("Q large view: press to open, press again to close (instead of hold)", false);
+        qToggle.addActionListener(e -> view.setHoldForLargeView(!qToggle.isSelected()));
+        settings.add(qToggle);
+        settings.addSeparator();
+        JMenuItem hint = new JMenuItem("Large card view: point at a card and hold Q (Esc also closes)");
         hint.setEnabled(false);
         settings.add(hint);
         JMenuItem stackHint = new JMenuItem("Stack details: right-click the stack pop-up or press Tab");

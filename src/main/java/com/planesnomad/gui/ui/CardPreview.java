@@ -121,10 +121,18 @@ public final class CardPreview {
         return largeWindow != null && largeWindow.isVisible();
     }
 
-    /** Hotkey: show the hovered card large, or close the large view. */
+    /** Hotkey (toggle setting): show the hovered card large, or close the large view. */
     public void toggleLarge(Window owner) {
         if (isLargeShowing()) {
             largeWindow.setVisible(false);
+            return;
+        }
+        openLarge(owner);
+    }
+
+    /** Hotkey (hold setting, the default): show the hovered card large while the key is held. */
+    public void openLarge(Window owner) {
+        if (isLargeShowing()) {
             return;
         }
         if (headless || hovered == null || owner == null) {

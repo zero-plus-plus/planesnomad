@@ -31,7 +31,8 @@ import java.util.Set;
 /**
  * One horizontal row of cards (a hand, or the lands / other permanents / creatures of a
  * battlefield). Cards are sized from the row's height; tapped cards are turned sideways;
- * when cards don't fit they overlap. Hovering a card shows its preview.
+ * when cards don't fit they overlap, down to about a third of each card; a row longer than that
+ * pans (drag along it, or the mouse wheel). Hovering a card shows its preview.
  *
  * Battlefield rows group identical cards into piles ({@link CardGroups}): a pile is drawn as up
  * to three offset cards with a "×N" count. Right-click a card or pile to select a number of a
@@ -46,6 +47,7 @@ public final class CardRow extends JComponent {
     private boolean grouping;
     private boolean landRow;
     private boolean stackLandsFully;
+    private boolean separateArts;
     private List<CardSnapshot> cards = List.of();
     private List<Pile> piles = List.of();
     /** One hit box per pile (a single card is a pile of one), in drawing order. */
@@ -83,16 +85,68 @@ public final class CardRow extends JComponent {
 
             @Override
             public void mousePressed(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e) && maxScroll > 0) {
+                    dragFromX = e.getX();
+                    dragFromScroll = scroll;
+                }
                 maybeMenu(e);
             }
 
             @Override
+            public void mouseDragged(MouseEvent e) {
+                if (dragFromX != Integer.MIN_VALUE) {
+                    // Drag along the row: the cards follow the mouse.
+                    setScroll(dragFromScroll - (e.getX() - dragFromX));
+                    preview.exit();
+                }
+            }
+
+            @Override
             public void mouseReleased(MouseEvent e) {
+                dragFromX = Integer.MIN_VALUE;
                 maybeMenu(e);
             }
         };
         addMouseListener(mouse);
         addMouseMotionListener(mouse);
+        // Mouse wheel (or a touchpad's sideways scroll) pans a row that doesn't fit.
+        addMouseWheelListener(e -> {
+            if (maxScroll > 0) {
+                int step = Math.max(20, getHeight() / 2);
+                setScroll(scroll + (int) Math.round(e.getPreciseWheelRotation() * step));
+                updateHover(e.getPoint());
+            } else if (getParent() != null) {
+                getParent().dispatchEvent(SwingUtilities.convertMouseEvent(this, e, getParent()));
+            }
+        });
+    }
+
+    /** Horizontal pan of a row too long to show (pixels from the start), and its maximum. */
+    private int scroll;
+    private int maxScroll;
+    private int dragFromX = Integer.MIN_VALUE;
+    private int dragFromScroll;
+
+    private void setScroll(int value) {
+        int v = Math.max(0, Math.min(value, maxScroll));
+        if (v != scroll) {
+            scroll = v;
+            repaint();
+        }
+    }
+
+    /** How far the row is panned (0 = start), and how far it can go (0 = everything fits). */
+    public int scroll() {
+        return scroll;
+    }
+
+    public int maxScroll() {
+        return maxScroll;
+    }
+
+    /** Pans the row (clamped), e.g. for tests or keyboard navigation later. */
+    public void scrollTo(int value) {
+        setScroll(value);
     }
 
     /**
@@ -102,6 +156,12 @@ public final class CardRow extends JComponent {
     public void setGrouping(boolean on, boolean lands) {
         grouping = on;
         landRow = lands;
+        regroup();
+    }
+
+    /** Setting: different arts of the same card in separate piles (default: together). */
+    public void setSeparateArts(boolean on) {
+        separateArts = on;
         regroup();
     }
 
@@ -129,10 +189,11 @@ public final class CardRow extends JComponent {
         if (grouping) {
             // Forget choices for cards that are gone, so a new group starts with the default.
             Set<String> present = new HashSet<>();
-            CardGroups.group(cards, landRow, stackLandsFully).forEach(p -> present.add(p.baseKey()));
+            CardGroups.group(cards, landRow, stackLandsFully, separateArts, Set.of(), Set.of())
+                .forEach(p -> present.add(p.baseKey()));
             separated.retainAll(present);
             combined.retainAll(present);
-            piles = CardGroups.group(cards, landRow, stackLandsFully, separated, combined);
+            piles = CardGroups.group(cards, landRow, stackLandsFully, separateArts, separated, combined);
         } else {
             List<Pile> singles = new ArrayList<>();
             for (CardSnapshot c : cards) {
@@ -409,11 +470,28 @@ public final class CardRow extends JComponent {
         // so they all fit. A flag, not a sentinel value: the computed spacing can be exactly 1.0.
         boolean squeezed = total > available && n > 1;
         double squeeze = 0;
+        int content = total;
         if (squeezed) {
             int cardsOnly = total - gap * (n - 1);
             squeeze = (available - cardsOnly) / (double) (n - 1);
+            // Never overlap so much that a card can't be seen or pointed at: keep at least about a
+            // third of each card visible. If that's still too wide, the row pans (drag or wheel).
+            int narrowest = Integer.MAX_VALUE;
+            for (int i = 0; i < n - 1; i++) {
+                narrowest = Math.min(narrowest, widths[i]);
+            }
+            int minStrip = Math.max(Theme.px(14), (int) Math.round(cw * MIN_VISIBLE_SHARE));
+            squeeze = Math.max(squeeze, minStrip - narrowest);
+            content = widths[n - 1];
+            for (int i = 0; i < n - 1; i++) {
+                content += (int) Math.floor(widths[i] + squeeze);
+            }
         }
-        int x = pad + Math.max(0, (available - Math.min(total, available)) / 2);
+        maxScroll = Math.max(0, content - available);
+        if (scroll > maxScroll) {
+            scroll = maxScroll;
+        }
+        int x = pad - scroll + Math.max(0, (available - Math.min(content, available)) / 2);
         for (int i = 0; i < n; i++) {
             Pile pile = piles.get(i);
             CardSnapshot top = pile.top();
@@ -423,7 +501,46 @@ public final class CardRow extends JComponent {
             drawPile(g, pile, box, cw, ch, offset);
             x += squeezed ? (int) Math.floor(widths[i] + squeeze) : widths[i] + gap;
         }
+        if (maxScroll > 0) {
+            paintPanHints(g, pad, ch);
+        }
         g.dispose();
+    }
+
+    /** Smallest share of a card kept visible when a row overlaps; beyond that the row pans. */
+    static final double MIN_VISIBLE_SHARE = 0.34;
+
+    /** Faded edges with arrows where more of the row is off screen; a thin position bar. */
+    private void paintPanHints(Graphics2D g, int pad, int ch) {
+        int w = getWidth();
+        int h = getHeight();
+        int fade = Theme.px(28);
+        Color dark = new Color(0, 0, 0, 170);
+        Color clear = new Color(0, 0, 0, 0);
+        int arrow = Math.max(6, Theme.px(9));
+        if (scroll > 0) {
+            g.setPaint(new java.awt.GradientPaint(0, 0, dark, fade, 0, clear));
+            g.fillRect(0, 0, fade, h);
+            g.setColor(Theme.TEXT);
+            int cy = h / 2;
+            g.fillPolygon(new int[] {pad, pad + arrow, pad + arrow}, new int[] {cy, cy - arrow, cy + arrow}, 3);
+        }
+        if (scroll < maxScroll) {
+            g.setPaint(new java.awt.GradientPaint(w - fade, 0, clear, w, 0, dark));
+            g.fillRect(w - fade, 0, fade, h);
+            g.setColor(Theme.TEXT);
+            int cy = h / 2;
+            g.fillPolygon(new int[] {w - pad, w - pad - arrow, w - pad - arrow}, new int[] {cy, cy - arrow, cy + arrow}, 3);
+        }
+        // Position bar along the bottom edge.
+        int barH = Math.max(2, Theme.px(3));
+        int trackW = w - 2 * pad;
+        int thumbW = Math.max(Theme.px(30), (int) ((long) trackW * trackW / (trackW + maxScroll)));
+        int thumbX = pad + (int) ((long) (trackW - thumbW) * scroll / maxScroll);
+        g.setColor(new Color(255, 255, 255, 40));
+        g.fillRoundRect(pad, h - barH - 1, trackW, barH, barH, barH);
+        g.setColor(new Color(255, 255, 255, 150));
+        g.fillRoundRect(thumbX, h - barH - 1, thumbW, barH, barH, barH);
     }
 
     /** How far each card behind the top one of a pile peeks out to the right. */

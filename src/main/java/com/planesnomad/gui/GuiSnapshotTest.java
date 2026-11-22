@@ -51,6 +51,17 @@ public final class GuiSnapshotTest {
         check("Enemy hand is always hidden (count only)", enemyHandAlwaysHidden && enemyHandEverNonEmpty);
         check("Your hand is always visible", yourHandAlwaysVisible);
 
+        // "Show enemy hand" after the match has ended (no engine thread left to ask): still works.
+        int before = snaps.size();
+        runner.setRevealEnemyHand(true);
+        MatchSnapshot afterEnd = snaps.size() > before ? snaps.get(snaps.size() - 1) : null;
+        check("'Show enemy hand' after the match ended publishes a snapshot with the hand face up",
+            afterEnd != null && afterEnd.enemy().hand().stream().noneMatch(CardSnapshot::isHidden));
+        runner.setRevealEnemyHand(false);
+        MatchSnapshot hiddenAgain = snaps.get(snaps.size() - 1);
+        check("  ... and unchecking hides it again",
+            hiddenAgain.enemy().hand().stream().allMatch(CardSnapshot::isHidden));
+
         check("Relics are shown as relics, not as cards on the battlefield",
             snaps.stream().allMatch(s -> s.you().battlefield().stream()
                 .noneMatch(c -> c.name().equals(RelicTest.PASSIVE) || c.name().equals(RelicTest.ACTIVATED))));

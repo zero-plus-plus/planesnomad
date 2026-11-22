@@ -204,7 +204,11 @@ public final class MatchRunner {
 
     public void setRevealEnemyHand(boolean value) {
         revealEnemyHand = value;
-        requestRefresh();
+        if (builder != null && isFinished()) {
+            publish();   // the match is over (no engine thread to ask): the game no longer changes
+        } else {
+            requestRefresh();
+        }
     }
 
     /** Ask for a fresh snapshot (e.g. after a display option changed while paused). */

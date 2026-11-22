@@ -49,7 +49,7 @@ public final class TopBar extends JPanel {
     private final JComboBox<String> speed = new JComboBox<>(SPEEDS);
     private final JCheckBox revealHand = new JCheckBox("Show enemy hand");
     private final JButton newMatch = new JButton("New match");
-    private final JButton collapse = new JButton("▴");
+    private final JButton collapse = new JButton();
     private boolean collapsed;
     private Runnable onCollapseChanged = () -> { };
 
@@ -100,12 +100,14 @@ public final class TopBar extends JPanel {
         content.add(right, BorderLayout.EAST);
 
         // Small, out-of-the-way collapse button in the top-right corner.
+        // The arrow is drawn, not a text character: some fonts (e.g. on Windows) lack the triangles.
         collapse.setToolTipText("Collapse / expand the top bar");
         collapse.setFocusable(false);
         collapse.setBorderPainted(false);
         collapse.setContentAreaFilled(false);
-        collapse.setForeground(Theme.TEXT_DIM);
-        collapse.setMargin(new Insets(0, 2, 0, 2));
+        collapse.setRolloverEnabled(true);
+        collapse.setMargin(new Insets(0, 0, 0, 0));
+        collapse.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
         collapse.addActionListener(e -> setCollapsed(!collapsed));
         JPanel corner = new JPanel(new BorderLayout());
         corner.setOpaque(false);
@@ -123,7 +125,7 @@ public final class TopBar extends JPanel {
     public void setCollapsed(boolean value) {
         collapsed = value;
         content.setVisible(!collapsed);
-        collapse.setText(collapsed ? "▾" : "▴");
+        applyFonts();   // the arrow icon flips
         revalidate();
         onCollapseChanged.run();
     }
@@ -136,7 +138,7 @@ public final class TopBar extends JPanel {
         int pad = Theme.px(4);
         setBorder(BorderFactory.createCompoundBorder(
             BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.PANEL_EDGE),
-            BorderFactory.createEmptyBorder(pad, Theme.px(8), pad, 0)));
+            BorderFactory.createEmptyBorder(pad, Theme.px(8), pad, Theme.px(4))));
         lives.setFont(Theme.font(Font.BOLD, 15));
         lives.setForeground(Theme.LIFE);
         status.setFont(Theme.font(Font.BOLD, 13));
@@ -145,7 +147,11 @@ public final class TopBar extends JPanel {
             c.setFont(Theme.font(Font.PLAIN, 11));
         }
         revealHand.setForeground(Theme.TEXT_DIM);
-        collapse.setFont(Theme.font(Font.PLAIN, 10));
+        int arrow = Math.max(22, Theme.px(24));   // click area, never tiny on small windows
+        collapse.setIcon(new Arrow(arrow, collapsed, false));
+        collapse.setRolloverIcon(new Arrow(arrow, collapsed, true));
+        collapse.setPreferredSize(new Dimension(arrow, arrow));
+        collapse.setMinimumSize(new Dimension(arrow, arrow));
         for (JComponent c : new JComponent[] {pause, step, speed, revealHand, newMatch}) {
             c.setMaximumSize(null);
             c.setPreferredSize(null);
@@ -190,6 +196,49 @@ public final class TopBar extends JPanel {
         relicRow.repaint();
     }
 
+    /** A drawn up/down arrow in a faint rounded box (brighter on hover). */
+    private static final class Arrow implements javax.swing.Icon {
+        private final int size;
+        private final boolean down;
+        private final boolean hover;
+
+        Arrow(int size, boolean down, boolean hover) {
+            this.size = size;
+            this.down = down;
+            this.hover = hover;
+        }
+
+        @Override
+        public void paintIcon(java.awt.Component c, java.awt.Graphics g0, int x, int y) {
+            java.awt.Graphics2D g = (java.awt.Graphics2D) g0.create();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+            int arc = size / 3;
+            g.setColor(hover ? new java.awt.Color(255, 255, 255, 40) : new java.awt.Color(255, 255, 255, 18));
+            g.fillRoundRect(x, y, size - 1, size - 1, arc, arc);
+            g.setColor(hover ? Theme.TEXT : Theme.TEXT_DIM);
+            g.drawRoundRect(x, y, size - 1, size - 1, arc, arc);
+            int w = (int) (size * 0.5);
+            int h = (int) (size * 0.28);
+            int cx = x + size / 2;
+            int cy = y + size / 2;
+            java.awt.Polygon tri = down
+                ? new java.awt.Polygon(new int[] {cx - w / 2, cx + w / 2, cx}, new int[] {cy - h / 2, cy - h / 2, cy + h / 2}, 3)
+                : new java.awt.Polygon(new int[] {cx - w / 2, cx + w / 2, cx}, new int[] {cy + h / 2, cy + h / 2, cy - h / 2}, 3);
+            g.fillPolygon(tri);
+            g.dispose();
+        }
+
+        @Override
+        public int getIconWidth() {
+            return size;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return size;
+        }
+    }
+
     private static JPanel row() {
         JPanel p = new JPanel();
         p.setLayout(new BoxLayout(p, BoxLayout.X_AXIS));
@@ -201,6 +250,8 @@ public final class TopBar extends JPanel {
     @Override
     public Dimension getPreferredSize() {
         Dimension d = super.getPreferredSize();
-        return collapsed ? new Dimension(d.width, Theme.px(14)) : d;
+        // Collapsed: a thin strip, but always tall enough for the whole expand button.
+        int strip = collapse.getPreferredSize().height + 2 * Math.max(2, Theme.px(3)) + 1;
+        return collapsed ? new Dimension(d.width, strip) : d;
     }
 }

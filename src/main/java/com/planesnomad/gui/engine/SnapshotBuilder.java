@@ -268,6 +268,15 @@ public final class SnapshotBuilder {
     }
 
     private static String imageKey(IPaperCard paper) {
+        if (paper instanceof forge.item.PaperToken pt) {
+            // Tokens: "t:<script>|<set>|<number>|<art>", e.g. "t:r_1_1_goblin|10E|4|1".
+            try {
+                String key = pt.getCardImageKey();
+                return key == null ? "" : key;
+            } catch (RuntimeException e) {
+                return "";
+            }
+        }
         if (paper instanceof forge.item.PaperCard pc) {
             try {
                 String key = pc.getCardImageKey();

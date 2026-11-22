@@ -59,10 +59,14 @@ public final class PlayerPanel extends JPanel {
     private List<CardSnapshot> exileCards = List.of();
     private List<RelicSnapshot> shownEffects = List.of();
     private List<CardSnapshot> shownFeatured = List.of();
+    /** Latest snapshot of this player, for the portrait's info pop-up. */
+    private PlayerSnapshot last;
+    private final PlayerInfoPopup info;
 
     public PlayerPanel(boolean enemy, CardPreview preview) {
         this.enemy = enemy;
         this.preview = preview;
+        this.info = new PlayerInfoPopup(enemy);
         setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
         setBackground(Theme.PANEL);
 
@@ -118,6 +122,7 @@ public final class PlayerPanel extends JPanel {
     }
 
     public void update(PlayerSnapshot p) {
+        last = p;
         name.setText(p.name() + (p.activeTurn() ? "  ●" : ""));
         subtitle.setText(p.subtitle() == null ? "" : p.subtitle());
         subtitle.setToolTipText(p.subtitle());
@@ -125,7 +130,6 @@ public final class PlayerPanel extends JPanel {
         portrait.life = p.lost() ? "✕" : Integer.toString(p.life());
         portrait.initial = p.name().isEmpty() ? "?" : p.name().substring(0, 1);
         portrait.color = enemy ? Theme.ENEMY : Theme.YOU;
-        portrait.setToolTipText("Life " + p.life() + " (started at " + p.startingLife() + ")");
         portrait.repaint();
         library.setText("Library " + p.librarySize());
         hand.setText("Hand " + p.hand().size());
@@ -208,7 +212,10 @@ public final class PlayerPanel extends JPanel {
         return new Dimension(Theme.px(220), super.getPreferredSize().height);
     }
 
-    /** Large portrait: the portrait card's art, with the life total on the lower right. */
+    /**
+     * Large portrait: the portrait card's art, with the life total on the lower right. Hovering
+     * shows the player's info pop-up (art crop, life, effects), not the portrait's card.
+     */
     private final class Portrait extends JComponent {
         CardSnapshot card;
         String life = "";
@@ -219,14 +226,13 @@ public final class PlayerPanel extends JPanel {
             MouseAdapter hover = new MouseAdapter() {
                 @Override
                 public void mouseMoved(MouseEvent e) {
-                    if (card != null) {
-                        preview.hover(card, Portrait.this, e.getPoint());
-                    }
+                    // The player, not the portrait's card: art crop, life and effects.
+                    info.show(last, Portrait.this, e.getPoint());
                 }
 
                 @Override
                 public void mouseExited(MouseEvent e) {
-                    preview.exit();
+                    info.hide();
                 }
             };
             addMouseListener(hover);

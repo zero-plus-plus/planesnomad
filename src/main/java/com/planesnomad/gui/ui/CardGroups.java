@@ -11,9 +11,12 @@ import java.util.Set;
 
 /**
  * Groups identical battlefield cards into piles, so a board with e.g. 200 goblin tokens stays
- * readable. Only exactly identical cards share a pile: same card and printing, same controller
- * (each row belongs to one player), and the same current state (tapped, power/toughness,
+ * readable. Only mechanically identical cards share a pile: same name, same controller (each row
+ * belongs to one player), same colors, types, text and current state (tapped, power/toughness,
  * damage, counters, granted abilities, attachments, summoning sickness, combat role, ...).
+ * Different arts of the same card (e.g. Mountains from several sets) pile together by default;
+ * a setting keeps each art separate. Tokens with the same name that work differently (e.g. a 1/1
+ * Goblin and a 2/1 haste Goblin) differ in their text or stats, so they never share a pile.
  * Any difference splits the pile, e.g. tapping 80 of 200 goblins gives a pile of 120 and one of 80.
  *
  * <ul>
@@ -57,21 +60,22 @@ public final class CardGroups {
      * @param stackLandsFully   setting: pile identical lands without the limit of 3
      */
     public static List<Pile> group(List<CardSnapshot> cards, boolean lands, boolean stackLandsFully) {
-        return group(cards, lands, stackLandsFully, Set.of(), Set.of());
+        return group(cards, lands, stackLandsFully, false, Set.of(), Set.of());
     }
 
     /**
      * With the player's own choices (from the right-click menu), by base key:
      * @param separated groups to show card by card, even if large
      * @param combined  groups to show as one pile, even if small (2+ cards), lands without a limit
+     * @param byArt     setting: different arts/printings of the same card in separate piles
      */
     public static List<Pile> group(List<CardSnapshot> cards, boolean lands, boolean stackLandsFully,
-                                   Set<String> separated, Set<String> combined) {
+                                   boolean byArt, Set<String> separated, Set<String> combined) {
         Map<String, List<CardSnapshot>> byKey = new LinkedHashMap<>();
         int unique = 0;
         for (CardSnapshot c : cards) {
             // Hidden or face-down cards are never grouped: the viewer can't know they are the same.
-            String key = c.faceDown() || c.isHidden() ? "#unique" + (unique++) + "#" + c.id() : key(c);
+            String key = c.faceDown() || c.isHidden() ? "#unique" + (unique++) + "#" + c.id() : key(c, byArt);
             byKey.computeIfAbsent(key, k -> new ArrayList<>()).add(c);
         }
         List<Pile> out = new ArrayList<>();
@@ -102,11 +106,16 @@ public final class CardGroups {
         }
     }
 
-    /** Everything that is visible about a card or matters to the rules, except its id. */
-    static String key(CardSnapshot c) {
+    /**
+     * Everything about a card that matters to the rules, except its id; with {@code byArt} also
+     * its printing (set, number, picture).
+     */
+    static String key(CardSnapshot c, boolean byArt) {
+        String printing = byArt
+            ? String.join("/", c.setCode(), c.collectorNumber(), c.imageKey(), String.valueOf(c.artIndex()))
+            : "";
         return String.join("\u0001",
-            c.name(), c.setCode(), c.collectorNumber(), c.imageKey(), String.valueOf(c.artIndex()),
-            c.colors(), c.manaCost(), c.typeLine(), c.rulesText(), c.granted(),
+            c.name(), printing, c.colors(), c.manaCost(), c.typeLine(), c.rulesText(), c.granted(),
             Objects.toString(c.power()), Objects.toString(c.toughness()), String.valueOf(c.damage()),
             flags(c), c.counters(), c.attachments(), String.valueOf(c.attachedTo()));
     }

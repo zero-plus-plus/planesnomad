@@ -129,6 +129,12 @@ public final class StressTest {
 
     /** Builds one test board (by name) as the screen would get it; the pool is collected once. */
     public static synchronized MatchSnapshot board(CardDb db, CardImages pictures, String name) throws Exception {
+        return board(db, pictures, name, false);
+    }
+
+    /** @param revealEnemyHand test option: the enemy's hand face up */
+    public static synchronized MatchSnapshot board(CardDb db, CardImages pictures, String name,
+                                                   boolean revealEnemyHand) throws Exception {
         if (images == null) {
             images = pictures;
             collectPool(db);
@@ -136,7 +142,7 @@ public final class StressTest {
         }
         Scenario sc = SCENARIOS.stream().filter(x -> x.name().equals(name)).findFirst()
             .orElse(SCENARIOS.get(SCENARIOS.size() - 1));
-        return build(db, sc);
+        return build(db, sc, revealEnemyHand);
     }
 
     /** Without local pictures the pool would be empty: use a few well-known cards instead. */
@@ -209,6 +215,10 @@ public final class StressTest {
     // ------------------------------------------------------------------ building a board
 
     private static MatchSnapshot build(CardDb db, Scenario sc) {
+        return build(db, sc, false);
+    }
+
+    private static MatchSnapshot build(CardDb db, Scenario sc, boolean revealEnemyHand) {
         Random rnd = new Random(SEED + sc.name().hashCode());
         Match match = TestMatches.create("", db);
         Game game = match.createGame();
@@ -247,7 +257,7 @@ public final class StressTest {
         SnapshotBuilder builder = new SnapshotBuilder(game, you, enemy, looks[0], looks[1]);
         builder.build(false);   // warm-up
         long t0 = System.nanoTime();
-        MatchSnapshot snap = builder.build(false);
+        MatchSnapshot snap = builder.build(revealEnemyHand);
         lastBuildMs = (System.nanoTime() - t0) / 1e6;
         return snap;
     }
@@ -514,7 +524,8 @@ public final class StressTest {
             }
             Rectangle last = boxes.get(boxes.size() - 1);
             int overflow = last.x + last.width - row.getWidth();
-            String spill = overflow > 0 ? String.format("  << LAST CARD %d px PAST THE EDGE", overflow) : "";
+            String spill = row.maxScroll() > 0 ? String.format("  (pans %d px: drag or wheel)", row.maxScroll())
+                : overflow > 0 ? String.format("  << LAST CARD %d px PAST THE EDGE", overflow) : "";
             String strip = boxes.size() == 1 || minStrip >= cardW ? "no overlap"
                 : String.format("narrowest visible strip %d px (%d%% of an untapped card)%s", minStrip,
                     Math.round(100.0 * minStrip / cardW), minStrip < 12 ? "  << TOO NARROW TO HOVER" : "");

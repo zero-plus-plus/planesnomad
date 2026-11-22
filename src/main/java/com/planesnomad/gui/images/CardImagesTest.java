@@ -147,6 +147,21 @@ public final class CardImagesTest {
         }
         check("A card name that can't be a file name gets no picture, without an error", oddOk);
 
+        // Tokens: Forge's naming "<pics>/tokens/<SET>/<number>_<script>.jpg", found next to pics/cards.
+        if (!images.tokenFolders().isEmpty()) {
+            CardSnapshot goblin10e = token("t:r_1_1_goblin|10E|4|1", "10E");
+            check("Goblin token (10E #4) has its picture from pics/tokens", images.hasImage(goblin10e));
+            List<java.nio.file.Path> found = images.tokenCandidates("r_1_1_goblin", "10E", "4");
+            check("  ... the exact printing is tried first (" + (found.isEmpty() ? "none" : found.get(0)) + ")",
+                !found.isEmpty() && found.get(0).toString().replace('\\', '/').endsWith("10E/4_r_1_1_goblin.jpg"));
+            CardSnapshot goblinOther = token("t:r_1_1_goblin|M13|99|1", "M13");
+            check("Goblin token from a set without a token picture falls back to another set's goblin",
+                images.hasImage(goblinOther));
+            check("Unknown token script: no picture, text frame", !images.hasImage(token("t:zz_9_9_nothing|10E|1|1", "10E")));
+        } else {
+            System.out.println("  (no tokens folder next to the card pictures: token checks skipped)");
+        }
+
         // Symbols: Forge keeps them next to the card pictures (pics/symbols beside pics/cards).
         Path symbols = pictures.toAbsolutePath().normalize().getParent().resolve("symbols");
         ManaSymbols.setFolder(symbols);
@@ -240,6 +255,11 @@ public final class CardImagesTest {
         g.dispose();
         ImageIO.write(img, "png", out);
         System.out.println("Symbol sheet: " + out.getAbsolutePath());
+    }
+
+    private static CardSnapshot token(String key, String set) {
+        return new CardSnapshot(-100 - key.hashCode() % 1000, "Goblin Token", set, "", "R", "", "Token Creature - Goblin", "",
+            1, 1, 0, false, true, false, true, false, false, false, false, key, 1, "normal");
     }
 
     private static void check(String description, boolean ok) {

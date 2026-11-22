@@ -77,6 +77,11 @@ public final class BoardPanel extends JPanel {
         youLands.setStackLandsFully(on);
     }
 
+    /** Setting: different arts of the same card in separate piles (default: together). */
+    public void setSeparateArts(boolean on) {
+        battlefieldRows().forEach(r -> r.setSeparateArts(on));
+    }
+
     /** Your battlefield rows (creatures, other permanents, lands), e.g. to read a pile selection. */
     public List<CardRow> yourBattlefieldRows() {
         return List.of(youCreatures, youOther, youLands);
