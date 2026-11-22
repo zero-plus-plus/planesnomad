@@ -360,6 +360,15 @@ public final class MatchView extends JPanel {
     }
 
     /** Setting: playmat backgrounds on each half of the table. */
+    /** Setting: pile identical lands without the default limit of three per pile. */
+    public void setStackLandsFully(boolean on) {
+        board.setStackLandsFully(on);
+    }
+
+    public BoardPanel board() {
+        return board;
+    }
+
     public void setPlaymats(boolean on) {
         board.setPlaymats(on);
     }

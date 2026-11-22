@@ -29,6 +29,8 @@ import java.awt.Dimension;
  * Card pictures: add -Dplanesnomad.cardImages=<folder> (Forge's picture cache is found by itself).
  * "unlimited" / "mixed" play decks built from printings that match the test pictures
  * (Unlimited only, or Torment + Shadowmoor + Future Sight + Khans of Tarkir).
+ * "boards" shows the stress-test boards instead of a match (e.g. Krenko with 200 goblins),
+ * frozen, to try piles and the right-click menu; the "Test boards" menu switches between them.
  */
 public final class MatchViewerApp {
 
@@ -41,6 +43,7 @@ public final class MatchViewerApp {
     private String testDecks = "";
     private CardImages images;
     private boolean revealEnemyHand;
+    private String currentBoard;
 
     private MatchViewerApp(CardDb db) {
         this.db = db;
@@ -48,29 +51,33 @@ public final class MatchViewerApp {
             @Override
             public void setPaused(boolean value) {
                 paused = value;
-                runner.setPaused(value);
+                if (runner != null) runner.setPaused(value);
             }
 
             @Override
             public void step() {
-                runner.step();
+                if (runner != null) runner.step();
             }
 
             @Override
             public void setSpeed(double value) {
                 speed = value;
-                runner.setSpeed(value);
+                if (runner != null) runner.setSpeed(value);
             }
 
             @Override
             public void setRevealEnemyHand(boolean value) {
                 revealEnemyHand = value;
-                runner.setRevealEnemyHand(value);
+                if (runner != null) runner.setRevealEnemyHand(value);
             }
 
             @Override
             public void newMatch() {
-                startMatch();
+                if (testDecks.equals("boards")) {
+                    showBoard(currentBoard);   // test boards: rebuild the same board
+                } else {
+                    startMatch();
+                }
             }
         });
     }
@@ -103,7 +110,33 @@ public final class MatchViewerApp {
         frame.setSize(Theme.REF_WIDTH, Theme.REF_HEIGHT + 40);
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
-        startMatch();
+        if (testDecks.equals("boards")) {
+            frame.setTitle("Planesnomad - test boards (frozen, no play)");
+            java.util.List<String> names = StressTest.boardNames();
+            showBoard(names.get(names.size() - 1));
+        } else {
+            startMatch();
+        }
+    }
+
+    /** Builds a test board off the Swing thread (it takes a moment), then shows it. */
+    private void showBoard(String name) {
+        currentBoard = name;
+        frame.setTitle("Planesnomad - test board: " + name + " (building...)");
+        Thread t = new Thread(() -> {
+            try {
+                var snap = StressTest.board(db, images, name);
+                SwingUtilities.invokeLater(() -> {
+                    view.update(snap);
+                    frame.setTitle("Planesnomad - test board: " + name + " (frozen, no play)");
+                });
+            } catch (Exception e) {
+                e.printStackTrace();
+                SwingUtilities.invokeLater(() -> frame.setTitle("Planesnomad - test board failed: " + e));
+            }
+        }, "test-board");
+        t.setDaemon(true);
+        t.start();
     }
 
     private JMenuBar menu() {
@@ -140,6 +173,9 @@ public final class MatchViewerApp {
         settings.add(collapse);
         settings.add(stackPos);
         settings.add(playmats);
+        JCheckBoxMenuItem lands = new JCheckBoxMenuItem("Stack identical lands beyond 3 per pile", false);
+        lands.addActionListener(e -> view.setStackLandsFully(lands.isSelected()));
+        settings.add(lands);
         JCheckBoxMenuItem column = new JCheckBoxMenuItem("Show stack & log column", true);
         column.addActionListener(e -> view.setStackColumnCollapsed(!column.isSelected()));
         view.onStackColumnChanged(() -> column.setSelected(!view.isStackColumnCollapsed()));
@@ -152,7 +188,19 @@ public final class MatchViewerApp {
         JMenuItem stackHint = new JMenuItem("Stack details: right-click the stack pop-up or press Tab");
         stackHint.setEnabled(false);
         settings.add(stackHint);
+        JMenuItem pileHint = new JMenuItem("Piles of identical cards: right-click to select how many");
+        pileHint.setEnabled(false);
+        settings.add(pileHint);
         bar.add(settings);
+        if (testDecks.equals("boards")) {
+            JMenu boards = new JMenu("Test boards");
+            for (String name : StressTest.boardNames()) {
+                JMenuItem it = new JMenuItem(name);
+                it.addActionListener(e -> showBoard(name));
+                boards.add(it);
+            }
+            bar.add(boards);
+        }
         return bar;
     }
 

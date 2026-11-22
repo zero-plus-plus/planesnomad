@@ -208,8 +208,47 @@ public final class SnapshotBuilder {
             granted(c),
             creature ? printedPower(c) : null,
             creature ? printedToughness(c) : null,
-            false
+            false,
+            counters(c),
+            c.getEntityAttachedTo() instanceof Card host ? host.getId() : 0,
+            attachments(c)
         );
+    }
+
+    /** Counters on the card, sorted, e.g. "CHARGE=1,P1P1=2"; empty if none. */
+    static String counters(Card c) {
+        try {
+            var map = c.getCounters();
+            if (map == null || map.isEmpty()) {
+                return "";
+            }
+            java.util.TreeSet<String> parts = new java.util.TreeSet<>();
+            for (var e : map.entrySet()) {
+                if (e.getCount() > 0) {
+                    parts.add(e.getElement() + "=" + e.getCount());
+                }
+            }
+            return String.join(",", parts);
+        } catch (RuntimeException e) {
+            return "";
+        }
+    }
+
+    /** Names of the auras/equipment attached to the card, sorted; empty if none. */
+    static String attachments(Card c) {
+        try {
+            if (!c.hasCardAttachments()) {
+                return "";
+            }
+            List<String> names = new ArrayList<>();
+            for (Card a : c.getAttachedCards()) {
+                names.add(a.getName());
+            }
+            Collections.sort(names);
+            return String.join(",", names);
+        } catch (RuntimeException e) {
+            return "";
+        }
     }
 
     /** The engine's cost text, e.g. "{1}{R/G}"; empty for "no cost". */

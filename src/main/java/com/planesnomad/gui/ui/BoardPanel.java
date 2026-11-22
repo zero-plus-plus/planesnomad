@@ -54,6 +54,13 @@ public final class BoardPanel extends JPanel {
         youLands = new CardRow("Lands", preview, false);
         youHand = new CardRow("Your hand", preview, false);
 
+        // Battlefield rows pile identical cards; hands never do.
+        for (CardRow row : List.of(enemyOther, enemyCreatures, youCreatures, youOther)) {
+            row.setGrouping(true, false);
+        }
+        enemyLands.setGrouping(true, true);
+        youLands.setGrouping(true, true);
+
         add(enemyHand, HAND_ENEMY);
         add(enemyLands, LANDS);
         add(enemyOther, OTHER);
@@ -62,6 +69,22 @@ public final class BoardPanel extends JPanel {
         add(youOther, OTHER);
         add(youLands, LANDS);
         add(youHand, HAND_YOU);
+    }
+
+    /** Setting: pile identical lands without the default limit of three per pile. */
+    public void setStackLandsFully(boolean on) {
+        enemyLands.setStackLandsFully(on);
+        youLands.setStackLandsFully(on);
+    }
+
+    /** Your battlefield rows (creatures, other permanents, lands), e.g. to read a pile selection. */
+    public List<CardRow> yourBattlefieldRows() {
+        return List.of(youCreatures, youOther, youLands);
+    }
+
+    /** All battlefield rows, enemy's first. */
+    public List<CardRow> battlefieldRows() {
+        return List.of(enemyLands, enemyOther, enemyCreatures, youCreatures, youOther, youLands);
     }
 
     /** Setting: playmat backgrounds on or off. */

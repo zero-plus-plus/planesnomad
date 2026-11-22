@@ -22,6 +22,9 @@ package com.planesnomad.gui.model;
  * @param printedToughness printed toughness (null if not a creature)
  * @param ability          true for an "ability card": an activated or triggered ability on the
  *                         stack, drawn with its source's name and art but only the ability's text
+ * @param counters         counters on the card, sorted, e.g. "CHARGE=1,P1P1=2"; empty if none
+ * @param attachedTo       id of the card this aura/equipment is attached to, 0 if none
+ * @param attachments      names of the cards attached to this one, sorted, comma-separated
  */
 public record CardSnapshot(
     int id,
@@ -49,8 +52,28 @@ public record CardSnapshot(
     String granted,
     Integer printedPower,
     Integer printedToughness,
-    boolean ability
+    boolean ability,
+    String counters,
+    int attachedTo,
+    String attachments
 ) {
+    public CardSnapshot {
+        counters = counters == null ? "" : counters;
+        attachments = attachments == null ? "" : attachments;
+    }
+
+    /** Without counters or attachments. */
+    public CardSnapshot(int id, String name, String setCode, String collectorNumber, String colors,
+                        String manaCost, String typeLine, String rulesText, Integer power, Integer toughness,
+                        int damage, boolean tapped, boolean creature, boolean land, boolean token,
+                        boolean attacking, boolean blocking, boolean summoningSick, boolean faceDown,
+                        String imageKey, int artIndex, String layout, String granted,
+                        Integer printedPower, Integer printedToughness, boolean ability) {
+        this(id, name, setCode, collectorNumber, colors, manaCost, typeLine, rulesText, power, toughness,
+            damage, tapped, creature, land, token, attacking, blocking, summoningSick, faceDown,
+            imageKey, artIndex, layout, granted, printedPower, printedToughness, ability, "", 0, "");
+    }
+
     /** A card as printed: nothing granted, printed power/toughness equal to the current ones. */
     public CardSnapshot(int id, String name, String setCode, String collectorNumber, String colors,
                         String manaCost, String typeLine, String rulesText, Integer power, Integer toughness,
@@ -69,7 +92,7 @@ public record CardSnapshot(
     public CardSnapshot asAbility(String kindLine, String abilityText) {
         return new CardSnapshot(id, name, setCode, collectorNumber, colors, "", kindLine, abilityText,
             null, null, 0, false, false, false, token, false, false, false, false,
-            imageKey, artIndex, layout, "", null, null, true);
+            imageKey, artIndex, layout, "", null, null, true, "", 0, "");
     }
 
     /** True if current power or toughness differs from the printed values. */
