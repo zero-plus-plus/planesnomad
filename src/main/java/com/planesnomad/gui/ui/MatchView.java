@@ -84,8 +84,10 @@ public final class MatchView extends JPanel {
     private final javax.swing.JSplitPane split =
         new javax.swing.JSplitPane(javax.swing.JSplitPane.HORIZONTAL_SPLIT, true);
     private final JPanel collapsedStrip = new JPanel(new BorderLayout());
-    private final javax.swing.JButton collapseButton = smallButton("»", "Hide the stack & log column");
-    private final javax.swing.JButton expandButton = smallButton("«", "Show the stack & log column");
+    private final javax.swing.JButton collapseButton = smallButton("»", "Back to the history bar");
+    private final javax.swing.JButton expandButton = smallButton("«", "Show the full game log and stack list");
+    /** Shown while the log column is collapsed (the default): the match history as icons. */
+    private final HistoryBar historyBar = new HistoryBar();
     private final JPanel center = new JPanel(new BorderLayout());
     private boolean columnCollapsed;
     /** The column's width (reference pixels at 1280x720), kept while collapsed and across resizes. */
@@ -135,6 +137,7 @@ public final class MatchView extends JPanel {
         collapsedStrip.setBackground(Theme.PANEL);
         collapsedStrip.setBorder(BorderFactory.createMatteBorder(0, 1, 0, 0, Theme.PANEL_EDGE));
         collapsedStrip.add(expandButton, BorderLayout.NORTH);
+        collapsedStrip.add(historyBar, BorderLayout.CENTER);
         split.setLeftComponent(boardLayer);
         split.setRightComponent(rightColumn);
         split.setResizeWeight(1.0);          // the board takes extra space; the column keeps its width
@@ -153,6 +156,8 @@ public final class MatchView extends JPanel {
         expandButton.addActionListener(e -> setStackColumnCollapsed(false));
         center.add(split, BorderLayout.CENTER);
         add(center, BorderLayout.CENTER);
+        // Default: the history bar; the full log column is one click (or Tab) away.
+        setStackColumnCollapsed(true);
 
         installKeys();
         addComponentListener(new ComponentAdapter() {
@@ -234,7 +239,13 @@ public final class MatchView extends JPanel {
         stackAndLog.setStackExpanded(!stackAndLog.isStackExpanded());
     }
 
-    /** Hide the stack & log column (a thin strip with a button stays), or show it again. */
+    public HistoryBar historyBar() {
+        return historyBar;
+    }
+
+    /**
+     * Collapse the stack & log column to the history bar (the default), or show the full log again.
+     */
     public void setStackColumnCollapsed(boolean collapse) {
         if (collapse == columnCollapsed) {
             return;
@@ -366,6 +377,7 @@ public final class MatchView extends JPanel {
         youPanel.update(s.you());
         board.update(s);
         stackAndLog.update(s);
+        historyBar.setEntries(s.history());
         updateStackPopup(s);
         repaint();
     }

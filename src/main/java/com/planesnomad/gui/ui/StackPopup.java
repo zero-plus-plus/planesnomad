@@ -30,6 +30,7 @@ import java.util.List;
  * - The item currently resolving (e.g. waiting for a choice) is tagged "Resolving".
  * - Hover a card for its preview; drag the pop-up to move it; right-click (or Tab, handled by
  *   {@link MatchView}) to show the full text list in the right column.
+ * - Resize with the grip in the bottom-right corner, or Ctrl + mouse wheel; the size is kept.
  */
 public final class StackPopup extends JComponent {
 
@@ -47,6 +48,11 @@ public final class StackPopup extends JComponent {
     private final List<StackItem> hitItems = new ArrayList<>();
     private boolean movedByUser;
     private Point dragOffset;
+    /** Size chosen by the player (resize grip or Ctrl + wheel), 1.0 = default; kept between pop-ups. */
+    private double sizeScale = 1.0;
+    private boolean resizing;
+    public static final double MIN_SCALE = 0.6;
+    public static final double MAX_SCALE = 2.2;
 
     public StackPopup(CardPreview preview, Runnable onToggleDetails) {
         this.preview = preview;
@@ -59,17 +65,28 @@ public final class StackPopup extends JComponent {
                 if (SwingUtilities.isRightMouseButton(e) || e.isPopupTrigger()) {
                     onToggleDetails.run();
                 } else if (SwingUtilities.isLeftMouseButton(e)) {
-                    dragOffset = e.getPoint();
+                    if (onGrip(e.getPoint())) {
+                        resizing = true;
+                    } else {
+                        dragOffset = e.getPoint();
+                    }
                 }
             }
 
             @Override
             public void mouseReleased(MouseEvent e) {
                 dragOffset = null;
+                resizing = false;
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
+                if (resizing) {
+                    // The grip follows the mouse: the card width sets the size.
+                    preview.exit();
+                    setSizeScale((e.getX() - 2.0 * pad()) / Theme.px(CARD_WIDTH));
+                    return;
+                }
                 if (dragOffset == null || getParent() == null) {
                     return;
                 }
@@ -81,7 +98,9 @@ public final class StackPopup extends JComponent {
 
             @Override
             public void mouseMoved(MouseEvent e) {
-                StackItem hit = itemAt(e.getPoint());
+                setCursor(java.awt.Cursor.getPredefinedCursor(onGrip(e.getPoint())
+                    ? java.awt.Cursor.SE_RESIZE_CURSOR : java.awt.Cursor.MOVE_CURSOR));
+                StackItem hit = onGrip(e.getPoint()) ? null : itemAt(e.getPoint());
                 if (hit != null && hit.source() != null) {
                     preview.hover(hit.source(), StackPopup.this, e.getPoint());
                 } else {
@@ -96,6 +115,41 @@ public final class StackPopup extends JComponent {
         };
         addMouseListener(mouse);
         addMouseMotionListener(mouse);
+        // Ctrl + mouse wheel: bigger / smaller.
+        addMouseWheelListener(e -> {
+            if (e.isControlDown()) {
+                setSizeScale(sizeScale * (e.getPreciseWheelRotation() < 0 ? 1.1 : 1 / 1.1));
+            }
+        });
+    }
+
+    /** Resize (clamped to {@link #MIN_SCALE}..{@link #MAX_SCALE}); keeps the pop-up inside the board. */
+    public void setSizeScale(double scale) {
+        double s = Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
+        if (Math.abs(s - sizeScale) < 0.001) {
+            return;
+        }
+        sizeScale = s;
+        setSize(getPreferredSize());
+        moveWithin(getX(), getY());
+        revalidate();
+        repaint();
+        if (getParent() != null) {
+            getParent().repaint();
+        }
+    }
+
+    public double sizeScale() {
+        return sizeScale;
+    }
+
+    /** The resize grip: the bottom-right corner. */
+    private int gripSize() {
+        return Math.max(12, Theme.px(16));
+    }
+
+    private boolean onGrip(Point p) {
+        return p.x >= getWidth() - gripSize() && p.y >= getHeight() - gripSize();
     }
 
     public void setItems(List<StackItem> items) {
@@ -129,7 +183,7 @@ public final class StackPopup extends JComponent {
     }
 
     private int cardW() {
-        return Theme.px(CARD_WIDTH);
+        return (int) Math.round(Theme.px(CARD_WIDTH) * sizeScale);
     }
 
     private int cardH() {
@@ -152,7 +206,7 @@ public final class StackPopup extends JComponent {
     public Dimension getPreferredSize() {
         int n = Math.max(1, shownCount());
         int step = (int) (cardH() * CASCADE_STEP);
-        int extra = items.size() > MAX_SHOWN ? Theme.px(16) : 0;
+        int extra = items.size() > MAX_SHOWN ? Theme.px(16) : Theme.px(6);   // room for the grip
         return new Dimension(cardW() + 2 * pad(), header() + cardH() + (n - 1) * step + pad() + extra);
     }
 
@@ -236,6 +290,15 @@ public final class StackPopup extends JComponent {
             g.setFont(Theme.font(Font.ITALIC, 10));
             g.setColor(Theme.TEXT_DIM);
             g.drawString("+" + (items.size() - MAX_SHOWN) + " more (Tab)", pad(), getHeight() - pad() / 2);
+        }
+        // Resize grip: three short diagonal lines in the corner.
+        g.setColor(Theme.TEXT_DIM);
+        g.setStroke(new BasicStroke(Math.max(1f, Theme.px(1.2))));
+        int gx = getWidth() - Theme.px(3);
+        int gy = getHeight() - Theme.px(3);
+        for (int k = 1; k <= 3; k++) {
+            int d = k * gripSize() / 4;
+            g.drawLine(gx - d, gy, gx, gy - d);
         }
         g.dispose();
     }

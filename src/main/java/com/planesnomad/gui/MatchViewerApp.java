@@ -44,6 +44,9 @@ public final class MatchViewerApp {
     private CardImages images;
     private boolean revealEnemyHand;
     private String currentBoard;
+    /** Phase stops and minimum enemy-spell time, kept across matches. */
+    private final java.util.Set<String> stops = new java.util.HashSet<>(MatchRunner.defaultStops());
+    private long minEnemySpellMs = MatchRunner.DEFAULT_MIN_ENEMY_SPELL_MS;
 
     private MatchViewerApp(CardDb db) {
         this.db = db;
@@ -183,7 +186,8 @@ public final class MatchViewerApp {
         JCheckBoxMenuItem arts = new JCheckBoxMenuItem("Keep different arts of a card in separate piles", false);
         arts.addActionListener(e -> view.setSeparateArts(arts.isSelected()));
         settings.add(arts);
-        JCheckBoxMenuItem column = new JCheckBoxMenuItem("Show stack & log column", true);
+        JCheckBoxMenuItem column = new JCheckBoxMenuItem("Show full game log column (instead of the history bar)",
+            !view.isStackColumnCollapsed());
         column.addActionListener(e -> view.setStackColumnCollapsed(!column.isSelected()));
         view.onStackColumnChanged(() -> column.setSelected(!view.isStackColumnCollapsed()));
         settings.add(column);
@@ -203,6 +207,7 @@ public final class MatchViewerApp {
         pileHint.setEnabled(false);
         settings.add(pileHint);
         bar.add(settings);
+        bar.add(stopsMenu());
         if (testDecks.equals("boards")) {
             JMenu boards = new JMenu("Test boards");
             for (String name : StressTest.boardNames()) {
@@ -215,6 +220,49 @@ public final class MatchViewerApp {
         return bar;
     }
 
+    /** Forge-style phase stops: play pauses at these phase changes; other phases go by quickly. */
+    private JMenu stopsMenu() {
+        JMenu menu = new JMenu("Stops");
+        forge.game.phase.PhaseType[] phases = {
+            forge.game.phase.PhaseType.UPKEEP, forge.game.phase.PhaseType.DRAW, forge.game.phase.PhaseType.MAIN1,
+            forge.game.phase.PhaseType.COMBAT_BEGIN, forge.game.phase.PhaseType.COMBAT_DECLARE_ATTACKERS,
+            forge.game.phase.PhaseType.COMBAT_DECLARE_BLOCKERS, forge.game.phase.PhaseType.COMBAT_DAMAGE,
+            forge.game.phase.PhaseType.COMBAT_END, forge.game.phase.PhaseType.MAIN2,
+            forge.game.phase.PhaseType.END_OF_TURN};
+        for (boolean yours : new boolean[] {true, false}) {
+            JMenu side = new JMenu(yours ? "Your turn" : "Enemy's turn");
+            for (forge.game.phase.PhaseType ph : phases) {
+                String key = MatchRunner.stopKey(yours, ph);
+                JCheckBoxMenuItem item = new JCheckBoxMenuItem(ph.nameForUi, stops.contains(key));
+                item.addActionListener(e -> {
+                    if (item.isSelected()) stops.add(key); else stops.remove(key);
+                    if (runner != null) runner.setStop(yours, ph, item.isSelected());
+                });
+                side.add(item);
+            }
+            menu.add(side);
+        }
+        menu.addSeparator();
+        JMenu minShow = new JMenu("Enemy spells stay visible at least");
+        javax.swing.ButtonGroup group = new javax.swing.ButtonGroup();
+        for (long ms : new long[] {0, 500, 1000, 1500, 2000, 3000}) {
+            javax.swing.JRadioButtonMenuItem it = new javax.swing.JRadioButtonMenuItem(
+                ms == 0 ? "No minimum" : (ms / 1000.0 + " s").replace(".0 s", " s"), ms == minEnemySpellMs);
+            it.addActionListener(e -> {
+                minEnemySpellMs = ms;
+                if (runner != null) runner.setMinEnemySpellMs(ms);
+            });
+            group.add(it);
+            minShow.add(it);
+        }
+        menu.add(minShow);
+        menu.addSeparator();
+        JMenuItem hint = new JMenuItem("Play pauses at checked phases; others pass quickly");
+        hint.setEnabled(false);
+        menu.add(hint);
+        return menu;
+    }
+
     private void startMatch() {
         Match match = TestMatches.create(testDecks, db);
         var looks = TestMatches.looks(testDecks);
@@ -223,6 +271,15 @@ public final class MatchViewerApp {
         runner.setPaused(paused);
         runner.setSpeed(speed);
         runner.setRevealEnemyHand(revealEnemyHand);
+        runner.setMinEnemySpellMs(minEnemySpellMs);
+        for (String key : MatchRunner.defaultStops()) {
+            if (!stops.contains(key)) {
+                runner.setStop(key.startsWith("you:"), forge.game.phase.PhaseType.valueOf(key.substring(key.indexOf(':') + 1)), false);
+            }
+        }
+        for (String key : stops) {
+            runner.setStop(key.startsWith("you:"), forge.game.phase.PhaseType.valueOf(key.substring(key.indexOf(':') + 1)), true);
+        }
         runner.start();
     }
 }

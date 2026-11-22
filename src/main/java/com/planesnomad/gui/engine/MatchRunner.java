@@ -51,6 +51,7 @@ public final class MatchRunner {
 
     private Game game;
     private SnapshotBuilder builder;
+    private HistoryRecorder history;
     private Thread thread;
 
     /**
@@ -82,6 +83,7 @@ public final class MatchRunner {
     private void run() {
         game = match.createGame();
         builder = new SnapshotBuilder(game, player(youName), player(enemyName), youLook, enemyLook);
+        history = builder.recordHistory();
         game.subscribeToEvents(this);
         publish();
         match.startGame(game);
@@ -100,29 +102,97 @@ public final class MatchRunner {
     /** Called by the engine's event bus, on the engine thread. */
     @Subscribe
     public void onEvent(GameEvent event) {
-        int weight = paceWeight(event);
-        if (weight == 0) {
-            return;
+        if (history != null) {
+            history.record(event);   // every event, also those that aren't pace points (e.g. deaths)
+        }
+        long delay = delayFor(event);
+        if (delay < 0) {
+            return;   // not something to show
         }
         publish();
         if (!(event instanceof GameEventGameFinished)) {
-            pace(weight);
+            pace(delay);
         }
     }
 
-    /** 0 = not a pace point; 1 = normal; 2 = worth a longer look (new turn, combat). */
-    private static int paceWeight(GameEvent e) {
+    // ------------------------------------------------------------------ pacing and stops
+
+    /** Phase stops: where play pauses at a phase change. Key: "you:MAIN1", "enemy:END_OF_TURN". */
+    private final java.util.Set<String> stops = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    /** Enemy spells stay on screen at least this long, even when everything else runs fast. */
+    private volatile long minEnemySpellMs = DEFAULT_MIN_ENEMY_SPELL_MS;
+
+    public static final long DEFAULT_MIN_ENEMY_SPELL_MS = 1000;
+
+    /** Default stops, as in Forge: your main phases and combat, the enemy's combat and end step. */
+    public static java.util.Set<String> defaultStops() {
+        return java.util.Set.of("you:UPKEEP", "you:MAIN1", "you:COMBAT_DECLARE_ATTACKERS", "you:MAIN2",
+            "enemy:COMBAT_DECLARE_ATTACKERS", "enemy:COMBAT_DECLARE_BLOCKERS", "enemy:END_OF_TURN");
+    }
+
+    {
+        stops.addAll(defaultStops());
+    }
+
+    public static String stopKey(boolean yourTurn, forge.game.phase.PhaseType phase) {
+        return (yourTurn ? "you:" : "enemy:") + phase.name();
+    }
+
+    public void setStop(boolean yourTurn, forge.game.phase.PhaseType phase, boolean on) {
+        if (on) {
+            stops.add(stopKey(yourTurn, phase));
+        } else {
+            stops.remove(stopKey(yourTurn, phase));
+        }
+    }
+
+    public boolean isStop(boolean yourTurn, forge.game.phase.PhaseType phase) {
+        return stops.contains(stopKey(yourTurn, phase));
+    }
+
+    public void setMinEnemySpellMs(long ms) {
+        minEnemySpellMs = Math.max(0, ms);
+    }
+
+    public long minEnemySpellMs() {
+        return minEnemySpellMs;
+    }
+
+    /**
+     * How long to show the moment after this event (ms), or -1 if it isn't worth a snapshot.
+     * - Spells cast: the normal delay, but enemy spells at least {@link #minEnemySpellMs} (they
+     *   must be seen, even when the player would auto-pass).
+     * - A resolution: shown, no wait (simple resolutions don't linger on the stack).
+     * - A phase change: a wait only at a stop; other phases go by quickly.
+     * - New turn, attacks, blocks: a longer look. Lands, damage: the normal delay.
+     */
+    private long delayFor(GameEvent e) {
+        long base = (long) (BASE_DELAY_MS / speed);
         if (e instanceof GameEventTurnBegan || e instanceof GameEventAttackersDeclared
             || e instanceof GameEventBlockersDeclared) {
-            return 2;
+            return 2 * base;
         }
-        if (e instanceof GameEventSpellAbilityCast || e instanceof GameEventSpellResolved
-            || e instanceof GameEventLandPlayed || e instanceof GameEventPlayerDamaged
-            || e instanceof GameEventCardDamaged || e instanceof GameEventTurnPhase
-            || e instanceof GameEventGameFinished) {
-            return 1;
+        if (e instanceof GameEventSpellAbilityCast cast) {
+            boolean spell = cast.si() != null && !cast.si().isAbility() && !cast.si().isTrigger();
+            boolean enemy = cast.si() != null && cast.si().getActivatingPlayer() != null
+                && !cast.si().getActivatingPlayer().getName().equals(youName);
+            return spell && enemy ? Math.max(base, minEnemySpellMs) : base;
         }
-        return 0;
+        if (e instanceof GameEventSpellResolved) {
+            return 0;
+        }
+        if (e instanceof GameEventTurnPhase tp) {
+            boolean yourTurn = tp.playerTurn() != null && tp.playerTurn().getName().equals(youName);
+            return tp.phase() != null && isStop(yourTurn, tp.phase()) ? base : 0;
+        }
+        if (e instanceof GameEventLandPlayed || e instanceof GameEventPlayerDamaged
+            || e instanceof GameEventCardDamaged) {
+            return base;
+        }
+        if (e instanceof GameEventGameFinished) {
+            return 0;
+        }
+        return -1;
     }
 
     private void publish() {
@@ -137,11 +207,10 @@ public final class MatchRunner {
         listener.accept(snapshot);
     }
 
-    private void pace(int weight) {
+    private void pace(long delay) {
         if (noDelay && !paused) {
             return;
         }
-        long delay = (long) (BASE_DELAY_MS * weight / speed);
         long until = System.currentTimeMillis() + delay;
         synchronized (lock) {
             try {

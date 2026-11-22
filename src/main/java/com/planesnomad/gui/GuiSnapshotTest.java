@@ -116,7 +116,7 @@ public final class GuiSnapshotTest {
             snaps.stream().flatMap(s -> s.stack().stream()).anyMatch(i -> i.byYou()
                 && i.kind() == MatchSnapshot.StackItem.Kind.TRIGGER && i.text().contains(RelicTest.TRIGGERED)));
         long resolvingSeen = snaps.stream().flatMap(s -> s.stack().stream()).filter(MatchSnapshot.StackItem::resolving).count();
-        System.out.println("  (items seen while resolving: " + resolvingSeen + ")");
+        check("AI vs AI: no item lingers on the stack while resolving (no choice is pending)", resolvingSeen == 0);
 
         // Screen behaviour of the stack pop-up (no window needed).
         MatchSnapshot withStack = snaps.stream().filter(s -> !s.stack().isEmpty()).findFirst().orElseThrow();
@@ -147,6 +147,9 @@ public final class GuiSnapshotTest {
             view.rescale();
             view.update(withStack);
             layoutTree(view);
+            col[1] = view.isStackColumnCollapsed();     // default: history bar, not the log column
+            view.setStackColumnCollapsed(false);
+            layoutTree(view);
             layoutTree(view);
             widths[0] = view.stackColumnWidth();
             int boardBefore = boardWidth(view);
@@ -169,9 +172,10 @@ public final class GuiSnapshotTest {
             layoutTree(view);
             widths[4] = view.stackColumnWidth();
         });
-        check("Stack & log column starts at its default width (" + widths[0] + " px)", Math.abs(widths[0] - 260) <= 8);
-        check("Collapsing hides the column and gives the board the space (+" + widths[2] + " px)",
-            widths[1] == 0 && widths[2] > 200);
+        check("The log column starts collapsed to the history bar", col[1]);
+        check("Opened, the stack & log column has its default width (" + widths[0] + " px)", Math.abs(widths[0] - 260) <= 8);
+        check("Collapsing to the history bar gives the board most of the space (+" + widths[2] + " px)",
+            widths[1] == 0 && widths[2] > 150);
         check("Tab while collapsed opens the column with the stack list", col[0]);
         check("A set column width is applied (" + widths[3] + " px for 420)", Math.abs(widths[3] - 420) <= 8);
         check("The width is kept after collapsing and expanding again (" + widths[4] + " px)", Math.abs(widths[4] - 420) <= 8);

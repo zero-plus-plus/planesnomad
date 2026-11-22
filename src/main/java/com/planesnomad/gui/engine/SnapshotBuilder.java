@@ -129,8 +129,30 @@ public final class SnapshotBuilder {
             player(enemy, enemyLook.subtitle(), revealEnemyHand, enemyPortrait, enemyPlaymat, enemyFeatured),
             stack(),
             log(),
-            result
+            result,
+            history == null ? List.of() : history.entries()
         );
+    }
+
+    /**
+     * True while a player is making a choice for the item that is resolving (human input sets
+     * this; AI choices are instant): the item then stays on the stack, tagged "Resolving".
+     */
+    private volatile boolean choicePending;
+
+    public void setChoicePending(boolean pending) {
+        choicePending = pending;
+    }
+
+    /** History for the icon bar; filled from engine events by {@link MatchRunner}. */
+    private HistoryRecorder history;
+
+    /** Starts recording history (call once, before the match starts). */
+    public HistoryRecorder recordHistory() {
+        if (history == null) {
+            history = new HistoryRecorder(game, you.getName(), this::relicOf);
+        }
+        return history;
     }
 
     // ------------------------------------------------------------------ players
@@ -449,11 +471,16 @@ public final class SnapshotBuilder {
 
     private List<StackItem> stack() {
         List<StackItem> out = new ArrayList<>();
-        // The engine resolves an item while it is still on the stack (it is removed afterwards),
-        // so an item waiting for a choice (e.g. Duress) stays visible; mark it as resolving.
+        // The engine resolves an item while it is still on the stack (it is removed afterwards).
+        // A simple resolution (a creature entering, a Bolt's damage) should not linger there, so the
+        // resolving item is hidden - unless a player is making a choice for it (e.g. scrying for
+        // Opt, discarding to Duress): then it stays, tagged "Resolving".
         SpellAbility resolvingNow = game.getStack().isResolving() ? game.getStack().getResolvingAbility() : null;
         for (SpellAbilityStackInstance si : game.getStack()) {
             SpellAbility sa = si.getSpellAbility();
+            if (sa != null && sa == resolvingNow && !choicePending) {
+                continue;
+            }
             Card source = si.getSourceCard();
             Player who = si.getActivatingPlayer();
             StackItem.Kind kind = sa != null && sa.isSpell() ? StackItem.Kind.SPELL

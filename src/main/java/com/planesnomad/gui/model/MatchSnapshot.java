@@ -15,6 +15,7 @@ import java.util.List;
  * @param stack        stack items, top of the stack first
  * @param log          plain-language game log lines, oldest first
  * @param result       null while the match is running; otherwise the end-of-match text
+ * @param history      what happened so far, oldest first (the history icon bar)
  */
 public record MatchSnapshot(
     int turn,
@@ -24,8 +25,19 @@ public record MatchSnapshot(
     PlayerSnapshot enemy,
     List<StackItem> stack,
     List<LogLine> log,
-    String result
+    String result,
+    List<HistoryEntry> history
 ) {
+    public MatchSnapshot {
+        history = history == null ? List.of() : history;
+    }
+
+    /** Without history (e.g. a board built directly for a test). */
+    public MatchSnapshot(int turn, String activePlayer, String phase, PlayerSnapshot you, PlayerSnapshot enemy,
+                         List<StackItem> stack, List<LogLine> log, String result) {
+        this(turn, activePlayer, phase, you, enemy, stack, log, result, List.of());
+    }
+
     public boolean finished() {
         return result != null;
     }
