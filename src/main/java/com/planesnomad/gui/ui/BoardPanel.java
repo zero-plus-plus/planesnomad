@@ -215,30 +215,24 @@ public final class BoardPanel extends JPanel {
         if (len < 4) {
             return;
         }
-        float w = Math.max(2.5f, Theme.px(3.5));
+        // Thin and quiet: a hairline with a small open arrow tip, so it marks the pair without
+        // covering the cards.
+        float w = Math.max(1.2f, Theme.px(1.4));
         java.awt.geom.Line2D line = new java.awt.geom.Line2D.Double(x1, y1, x2, y2);
-        g.setColor(new Color(0, 0, 0, 160));
-        g.setStroke(new BasicStroke(w + 2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.setColor(new Color(0, 0, 0, 110));
+        g.setStroke(new BasicStroke(w + 1.2f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(line);
-        g.setColor(Theme.BLOCKING);
+        g.setColor(TargetMarks.withAlpha(Theme.BLOCKING, 220));
         g.setStroke(new BasicStroke(w, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
         g.draw(line);
         double ang = Math.atan2(y2 - y1, x2 - x1);
-        double hl = Math.max(9, Theme.px(13));
-        double hw = hl * 0.65;
-        java.awt.geom.Path2D.Double head = new java.awt.geom.Path2D.Double();
-        head.moveTo(x2, y2);
-        head.lineTo(x2 - hl * Math.cos(ang) + hw * Math.sin(ang), y2 - hl * Math.sin(ang) - hw * Math.cos(ang));
-        head.lineTo(x2 - hl * Math.cos(ang) - hw * Math.sin(ang), y2 - hl * Math.sin(ang) + hw * Math.cos(ang));
-        head.closePath();
-        g.setStroke(new BasicStroke(2f));
-        g.setColor(new Color(0, 0, 0, 170));
-        g.draw(head);
-        g.setColor(Theme.BLOCKING);
-        g.fill(head);
-        // A small shield-like dot where the arrow leaves the blocker.
-        int d = (int) Math.max(7, w * 2.4);
-        g.fillOval((int) x1 - d / 2, (int) y1 - d / 2, d, d);
+        double hl = Math.max(4, Theme.px(5));
+        double hw = hl * 0.6;
+        java.awt.geom.Path2D.Double tip = new java.awt.geom.Path2D.Double();
+        tip.moveTo(x2 - hl * Math.cos(ang) + hw * Math.sin(ang), y2 - hl * Math.sin(ang) - hw * Math.cos(ang));
+        tip.lineTo(x2, y2);
+        tip.lineTo(x2 - hl * Math.cos(ang) - hw * Math.sin(ang), y2 - hl * Math.sin(ang) + hw * Math.cos(ang));
+        g.draw(tip);
     }
 
     private static void fill(PlayerSnapshot p, CardRow hand, CardRow lands, CardRow other, CardRow creatures) {
