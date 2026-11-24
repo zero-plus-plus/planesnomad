@@ -1,0 +1,22 @@
+Relic placeholder icons
+=======================
+
+These icons are from Twemoji, originally by Twitter, Inc. and other contributors,
+now maintained at https://github.com/jdecked/twemoji (release v17.0.3).
+The Twemoji graphics are licensed under CC-BY 4.0:
+https://creativecommons.org/licenses/by/4.0/
+
+They are unmodified 72x72 PNGs, renamed for readability:
+
+  fire.png              U+1F525  fire
+  compass.png           U+1F9ED  compass
+  magnifying-glass.png  U+1F50D  magnifying glass tilted left
+  test-tube.png         U+1F9EA  test tube
+  chess-pawn.png        U+265F   chess pawn
+  apple.png             U+1F34E  red apple
+  key.png               U+1F5DD  old key
+  feather.png           U+1FAB6  feather
+  mushroom.png          U+1F344  mushroom
+  meat.png              U+1F356  meat on bone
+
+They are placeholders for testing; final relic art will replace them.

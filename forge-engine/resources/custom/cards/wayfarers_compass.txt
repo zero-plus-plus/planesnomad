@@ -1,0 +1,7 @@
+Name:Wayfarer's Compass
+ManaCost:no cost
+Types:Artifact
+# Planesnomad relic (triggered). Lives in the command zone; shown as a relic in the UI.
+T:Mode$ Phase | Phase$ Upkeep | ValidPlayer$ You | TriggerZones$ Command | Execute$ TrigScry | TriggerDescription$ At the beginning of your upkeep, scry 1.
+SVar:TrigScry:DB$ Scry | ScryNum$ 1
+Oracle:At the beginning of your upkeep, scry 1.

@@ -1,71 +1,27 @@
 package com.planesnomad;
 
-import forge.CardStorageReader;
-import forge.StaticData;
-import forge.ImageKeys;
-import forge.ai.AIOption;
 import forge.ai.LobbyPlayerAi;
 import forge.card.CardDb;
 import forge.deck.Deck;
 import forge.game.Game;
+import forge.game.GameLogEntry;
+import forge.game.GameLogEntryType;
 import forge.game.GameRules;
 import forge.game.GameType;
 import forge.game.Match;
 import forge.game.player.RegisteredPlayer;
 import forge.item.PaperCard;
-import forge.util.Localizer;
-import forge.util.Lang;
 
-import java.nio.file.Path;
-import java.util.HashMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 
 public class PlanesnomadGame {
 
     public static void main(String[] args) {
-        Path resources = Path.of("forge-engine", "resources");
-
-        Localizer localizer = Localizer.getInstance();
-        localizer.setEnglish(true);
-        localizer.initialize("en-US", resources.resolve("languages").toString());
-        Lang.createInstance("en-US");
-
-        ImageKeys.initializeDirs(
-            resources.resolve("card-pictures").toString(),
-            new HashMap<>(),
-            resources.resolve("token-pictures").toString(),
-            resources.resolve("icons").toString(),
-            resources.resolve("boosters").toString(),
-            resources.resolve("fatpacks").toString(),
-            resources.resolve("boosterboxes").toString(),
-            resources.resolve("precons").toString(),
-            resources.resolve("tournamentpacks").toString()
-        );
-
-        System.out.println("Loading Forge card database...");
-
-        CardStorageReader cards = new CardStorageReader(
-            resources.resolve("cardsfolder").toString(), null, false);
-        CardStorageReader tokens = new CardStorageReader(
-            resources.resolve("tokenscripts").toString(), null, false);
-        CardStorageReader customCards = new CardStorageReader(
-            resources.resolve("custom/cards").toString(), null, false);
-        CardStorageReader customTokens = new CardStorageReader(
-            resources.resolve("custom/tokens").toString(), null, false);
-
-        new StaticData(
-            cards, tokens, customCards, customTokens,
-            resources.resolve("editions").toString(),
-            resources.resolve("custom/editions").toString(),
-            resources.resolve("blockdata").toString(),
-            resources.resolve("setlookup").toString(),
-            "ORIGINAL_ART_ALL_EDITIONS",
-            false, true, false, false, null
-        );
-
-        CardDb database = StaticData.instance().getCommonCards();
-        System.out.println("Card database loaded.");
+        CardDb database = ForgeEngine.initialize();
 
         var mountain = database.getCard("Mountain");
         System.out.println("Mountain rules: "
@@ -75,21 +31,8 @@ public class PlanesnomadGame {
         System.out.println("Island rules: "
             + island.getRules().getMainPart().getOracleText());
 
-        Deck redDeck = new Deck("Planesnomad - Red");
-        Deck blueDeck = new Deck("Planesnomad - Blue");
-
-        addCards(redDeck, database, "Shock", "10E", "232", 4);
-        addCards(redDeck, database, "Lightning Bolt", "M10", "146", 4);
-        addCards(redDeck, database, "Goblin Raider", "10E", "207", 4);
-        addCards(redDeck, database, "Mons's Goblin Raiders", "10E", "211", 4);
-        addBasicLands(redDeck, database, "Mountain", "M10", 12);
-
-
-        addCards(blueDeck, database, "Counterspell", "7ED", "68", 4);
-        addCards(blueDeck, database, "Unsummon", "10E", "117", 4);
-        addCards(blueDeck, database, "Merfolk of the Pearl Trident", "M13", "57", 4);
-        addCards(blueDeck, database, "Coral Merfolk", "10E", "79", 4);
-        addBasicLands(blueDeck, database, "Island", "M10", 12);
+        Deck redDeck = buildRedDeck(database);
+        Deck blueDeck = buildBlueDeck(database);
 
         System.out.println("Red deck: " + redDeck.getMain().countAll() + " cards");
         System.out.println("Blue deck: " + blueDeck.getMain().countAll() + " cards");
@@ -97,10 +40,10 @@ public class PlanesnomadGame {
         RegisteredPlayer human = new RegisteredPlayer(redDeck);
         RegisteredPlayer opponent = new RegisteredPlayer(blueDeck);
 
-        human.setPlayer(new LobbyPlayerAi(
-            "Red AI", Set.of(AIOption.USE_HYBRID_SIMULATION)));
-        opponent.setPlayer(new LobbyPlayerAi(
-            "Blue AI", Set.of(AIOption.USE_HYBRID_SIMULATION)));
+        // Standard Forge AI. AIOption.USE_HYBRID_SIMULATION (Forge's experimental
+        // simulation AI) repeatedly tried to cast spells it could not pay for.
+        human.setPlayer(createAi("Red AI"));
+        opponent.setPlayer(createAi("Blue AI"));
 
         GameRules rules = new GameRules(GameType.Constructed);
         Match match = new Match(rules, List.of(human, opponent), "Planesnomad Test");
@@ -110,6 +53,8 @@ public class PlanesnomadGame {
 
         System.out.println("Starting AI vs AI match...");
         match.startGame(game);
+
+        printGameLog(game);
 
         System.out.println("\n=== PLAYERS STILL IN GAME ===");
 
@@ -154,6 +99,50 @@ public class PlanesnomadGame {
         for (String result : outcome.getOutcomeStrings()) {
             System.out.println("  " + result);
         }
+    }
+
+    /** Prints the engine's game log oldest-first: turns, spells, lands, combat, damage, life. */
+    private static void printGameLog(Game game) {
+        Set<GameLogEntryType> shown = EnumSet.of(
+            GameLogEntryType.TURN, GameLogEntryType.LAND, GameLogEntryType.STACK_ADD,
+            GameLogEntryType.STACK_RESOLVE, GameLogEntryType.COMBAT, GameLogEntryType.DAMAGE,
+            GameLogEntryType.LIFE, GameLogEntryType.GAME_OUTCOME);
+        List<GameLogEntry> entries = new ArrayList<>(game.getGameLog().getLogEntriesForTypes(shown));
+        Collections.reverse(entries); // the engine stores newest first
+
+        System.out.println("\n=== GAME LOG ===");
+        for (GameLogEntry entry : entries) {
+            String indent = entry.type() == GameLogEntryType.TURN ? "" : "  ";
+            System.out.println(indent + entry.message().replace("\n", "\n" + indent));
+        }
+    }
+
+    /** Test deck: red burn and goblins. */
+    public static Deck buildRedDeck(CardDb database) {
+        Deck deck = new Deck("Planesnomad - Red");
+        addCards(deck, database, "Shock", "10E", "232", 4);
+        addCards(deck, database, "Lightning Bolt", "M10", "146", 4);
+        addCards(deck, database, "Goblin Raider", "10E", "207", 4);
+        addCards(deck, database, "Mons's Goblin Raiders", "10E", "211", 4);
+        addBasicLands(deck, database, "Mountain", "M10", 12);
+        return deck;
+    }
+
+    /** Test deck: blue counters, bounce and merfolk. */
+    public static Deck buildBlueDeck(CardDb database) {
+        Deck deck = new Deck("Planesnomad - Blue");
+        addCards(deck, database, "Counterspell", "7ED", "68", 4);
+        addCards(deck, database, "Unsummon", "10E", "117", 4);
+        addCards(deck, database, "Merfolk of the Pearl Trident", "M13", "57", 4);
+        addCards(deck, database, "Coral Merfolk", "10E", "79", 4);
+        addBasicLands(deck, database, "Island", "M10", 12);
+        return deck;
+    }
+
+    public static LobbyPlayerAi createAi(String name) {
+        LobbyPlayerAi ai = new LobbyPlayerAi(name, Set.of());
+        ai.setAiProfile(ForgeEngine.DEFAULT_AI_PROFILE);
+        return ai;
     }
 
     private static void addCards(
