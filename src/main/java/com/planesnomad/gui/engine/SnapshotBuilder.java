@@ -68,7 +68,7 @@ public final class SnapshotBuilder {
 
     /** A snapshot of a card by name (its default printing), for portraits, playmats, featured cards. */
     public static CardSnapshot named(String name) {
-        if (name == null || name.isBlank() || forge.StaticData.instance() == null) {
+        if (name == null || name.isBlank() || name.startsWith("file:") || forge.StaticData.instance() == null) {
             return null;
         }
         forge.item.PaperCard pc = forge.StaticData.instance().getCommonCards().getCard(name);
@@ -125,9 +125,8 @@ public final class SnapshotBuilder {
             ph.getTurn(),
             active == null ? "" : active.getName(),
             phase,
-            player(you, youLook.subtitle(), true, youPortrait, youPlaymat, youFeatured, youLook.featuredNotes()),
-            player(enemy, enemyLook.subtitle(), revealEnemyHand, enemyPortrait, enemyPlaymat, enemyFeatured,
-                enemyLook.featuredNotes()),
+            player(you, youLook, true, youPortrait, youPlaymat, youFeatured),
+            player(enemy, enemyLook, revealEnemyHand, enemyPortrait, enemyPlaymat, enemyFeatured),
             stack(),
             log(),
             result,
@@ -159,9 +158,9 @@ public final class SnapshotBuilder {
 
     // ------------------------------------------------------------------ players
 
-    private PlayerSnapshot player(Player p, String subtitle, boolean handVisible,
-                                  CardSnapshot portrait, CardSnapshot playmat, List<CardSnapshot> featured,
-                                  java.util.Map<String, String> featuredNotes) {
+    private PlayerSnapshot player(Player p, PlayerLook look, boolean handVisible,
+                                  CardSnapshot portrait, CardSnapshot playmat, List<CardSnapshot> featured) {
+        String subtitle = look.subtitle();
         List<CardSnapshot> hand = new ArrayList<>();
         for (Card c : p.getCardsIn(ZoneType.Hand)) {
             hand.add(handVisible ? card(c) : CardSnapshot.hidden(c.getId()));
@@ -182,7 +181,9 @@ public final class SnapshotBuilder {
             portrait,
             playmat,
             featured,
-            featuredNotes
+            look.featuredNotes(),
+            PlayerLook.file(look.portraitCard()),
+            PlayerLook.file(look.playmatCard())
         );
     }
 
@@ -574,6 +575,8 @@ public final class SnapshotBuilder {
 
     /** Log lines written by our own match rules (guaranteed draws), shown although engine notes aren't. */
     public static final String GUARANTEED_PREFIX = "Guaranteed: ";
+    /** Log lines about how a match was set up (e.g. bonus permanents at the start). */
+    public static final String START_PREFIX = "Start: ";
 
     private static final java.util.regex.Pattern CARD_ID = java.util.regex.Pattern.compile(" \\(\\d+\\)");
     /** The engine's label at the end of a trigger's text, e.g. "[Phase: Red AI]", "[Zone Changer: X]". */
@@ -591,7 +594,7 @@ public final class SnapshotBuilder {
         if (msg == null || msg.isBlank()) {
             return null;
         }
-        if (e.type() == GameLogEntryType.INFORMATION && !msg.startsWith(GUARANTEED_PREFIX)) {
+        if (e.type() == GameLogEntryType.INFORMATION && !msg.startsWith(GUARANTEED_PREFIX) && !msg.startsWith(START_PREFIX)) {
             return null;   // engine notes; only our own "Guaranteed: ..." lines are shown
         }
         String first = CARD_ID.matcher(msg.split("\n")[0].trim()).replaceAll("");

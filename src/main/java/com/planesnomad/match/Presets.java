@@ -11,6 +11,22 @@ public final class Presets {
 
     public static final String PERSON_NAME = "You";
 
+    /** The encounter the "Fight" launchers start: data/encounters/lorwyn/easy/merfolk-tidecaller.json. */
+    public static final String FIRST_ENCOUNTER = "lorwyn/easy/merfolk-tidecaller";
+
+    /** The player's deck for encounters until the run layer gives one (decks/Starter - Red.dck). */
+    public static final String STARTER_DECK = "Starter - Red";
+
+    /**
+     * You, for encounters: the red starter deck (Shocks, simple red creatures, a Pillage and a
+     * Blaze), 20 life and the test relics. Later the run supplies the deck and relics.
+     */
+    public static MatchSetup.Side encounterPlayer() {
+        return new MatchSetup.Side(PERSON_NAME, MatchSetup.Controller.PERSON, STARTER_DECK, 20,
+            List.of(RelicTest.PASSIVE, RelicTest.TRIGGERED, RelicTest.ACTIVATED, RelicTest.CONSUMABLE),
+            new PlayerLook("Red starter deck", "Krenko, Mob Boss", "Mountain", List.of()));
+    }
+
     /** @param which "", "unlimited" or "mixed"; @param person true: you play the bottom side */
     public static MatchSetup testMatch(String which, boolean person) {
         String w = which == null ? "" : which;

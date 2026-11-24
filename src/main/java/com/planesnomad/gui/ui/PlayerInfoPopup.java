@@ -159,10 +159,16 @@ public final class PlayerInfoPopup {
             int artH = (int) (inner * 0.62);
             if (draw) {
                 int arc = Theme.px(10);
-                if (player.portrait() != null) {
+                java.awt.image.BufferedImage pic = player.portraitFile() == null ? null
+                    : Playmats.picture(player.portraitFile(), inner, artH);
+                if (pic != null || player.portrait() != null) {
                     Graphics2D clip = (Graphics2D) g.create();
                     clip.clip(new RoundRectangle2D.Double(pad, y, inner, artH, arc, arc));
-                    CardPainter.paintArt(clip, player.portrait(), pad, y, inner, artH);
+                    if (pic != null) {
+                        clip.drawImage(pic, pad, y, null);
+                    } else {
+                        CardPainter.paintArt(clip, player.portrait(), pad, y, inner, artH);
+                    }
                     clip.dispose();
                 } else {
                     g.setColor(Theme.blend(accent, Color.BLACK, 0.5));

@@ -169,6 +169,7 @@ public final class PlayerPanel extends JPanel {
         subtitle.setText(p.subtitle() == null ? "" : p.subtitle());
         subtitle.setToolTipText(p.subtitle());
         portrait.card = p.portrait();
+        portrait.file = p.portraitFile();
         portrait.life = p.lost() ? "✕" : Integer.toString(p.life());
         portrait.initial = p.name().isEmpty() ? "?" : p.name().substring(0, 1);
         portrait.color = enemy ? Theme.ENEMY : Theme.YOU;
@@ -260,6 +261,8 @@ public final class PlayerPanel extends JPanel {
      */
     private final class Portrait extends JComponent {
         CardSnapshot card;
+        /** A picture file used instead of the card's art (an encounter's own icon). */
+        String file;
         String life = "";
         String initial = "?";
         Color color = Color.GRAY;
@@ -307,7 +310,13 @@ public final class PlayerPanel extends JPanel {
             int w = getWidth();
             int h = getHeight();
             int arc = Theme.px(12);
-            if (card != null) {
+            java.awt.image.BufferedImage pic = file == null ? null : Playmats.picture(file, w, h);
+            if (pic != null) {
+                Graphics2D clip = (Graphics2D) g.create();
+                clip.clip(new RoundRectangle2D.Double(0, 0, w, h, arc, arc));
+                clip.drawImage(pic, 0, 0, null);
+                clip.dispose();
+            } else if (card != null) {
                 CardPainter.paintArt(g, card, 0, 0, w, h);
             } else {
                 // Placeholder until portraits exist: the player's color and initial.

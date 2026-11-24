@@ -1,7 +1,7 @@
 package com.planesnomad.gui;
 
 import com.planesnomad.ForgeEngine;
-import com.planesnomad.encounter.Encounters;
+import com.planesnomad.encounter.EncounterLibrary;
 import com.planesnomad.gui.engine.MatchRunner;
 import com.planesnomad.gui.model.CardSnapshot;
 import com.planesnomad.gui.model.MatchSnapshot;
@@ -123,7 +123,7 @@ public final class FeatureTest {
         SwingUtilities.invokeAndWait(() -> {
             RewardScreen screen = new RewardScreen(new CardPreview());
             screen.setSize(960, 660);
-            var rewards = RewardOffers.roll(Encounters.MERFOLK.rewards(), new Random(5));
+            var rewards = RewardOffers.roll(EncounterLibrary.load(forge.StaticData.instance().getCommonCards()).get(com.planesnomad.match.Presets.FIRST_ENCOUNTER).rewards(), new Random(5));
             screen.show("Victory!", "test", rewards, o -> outcome[0] = o);
             check("Rewards: gold, a card choice and a relic", rewards.size() == 3
                 && rewards.get(0).kind == RewardScreen.Reward.Kind.GOLD

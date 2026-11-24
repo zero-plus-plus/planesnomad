@@ -1,4 +1,4 @@
-package com.planesnomad.encounter;
+package com.planesnomad.match;
 
 /**
  * A card an enemy is sure to get, shown face up in its effects bar ("T2" badge).

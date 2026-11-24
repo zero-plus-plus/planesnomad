@@ -1,6 +1,5 @@
 package com.planesnomad.match;
 
-import com.planesnomad.PlanesnomadGame;
 import com.planesnomad.gui.engine.HumanBridge;
 import com.planesnomad.gui.engine.HumanLobbyPlayer;
 import forge.LobbyPlayer;
@@ -28,16 +27,27 @@ public final class MatchFactory {
      */
     public static Match create(MatchSetup setup, CardDb db, DeckLibrary decks, HumanBridge bridge,
                                BiPredicate<Boolean, PhaseType> stops) {
+        return create(setup, db, decks, bridge, stops, new StartRules(setup));
+    }
+
+    /**
+     * As {@link #create(MatchSetup, CardDb, DeckLibrary, HumanBridge, BiPredicate)}, with the start
+     * rules the players follow (first player, preset hands). Call {@link StartRules#install} on the
+     * game before it starts (e.g. {@code runner.setBeforeStart(rules::install)}) for bonus
+     * permanents and guaranteed draws.
+     */
+    public static Match create(MatchSetup setup, CardDb db, DeckLibrary decks, HumanBridge bridge,
+                               BiPredicate<Boolean, PhaseType> stops, StartRules rules) {
         if (setup.you().name().equals(setup.enemy().name())) {
             throw new IllegalArgumentException("The two players need different names");
         }
-        RegisteredPlayer you = side(setup.you(), db, decks, bridge, stops);
-        RegisteredPlayer enemy = side(setup.enemy(), db, decks, bridge, stops);
+        RegisteredPlayer you = side(setup.you(), db, decks, bridge, stops, rules);
+        RegisteredPlayer enemy = side(setup.enemy(), db, decks, bridge, stops, rules);
         return new Match(new GameRules(GameType.Constructed), List.of(you, enemy), "Planesnomad");
     }
 
     private static RegisteredPlayer side(MatchSetup.Side s, CardDb db, DeckLibrary decks, HumanBridge bridge,
-                                         BiPredicate<Boolean, PhaseType> stops) {
+                                         BiPredicate<Boolean, PhaseType> stops, StartRules rules) {
         Deck deck = decks.get(s.deck());
         if (deck == null) {
             throw new IllegalArgumentException("Deck not found or unreadable: " + s.deck());
@@ -45,8 +55,8 @@ public final class MatchFactory {
         RegisteredPlayer rp = new RegisteredPlayer(deck);
         rp.setStartingLife(s.startingLife());
         LobbyPlayer player = s.controller() == MatchSetup.Controller.PERSON && bridge != null
-            ? new HumanLobbyPlayer(s.name(), bridge, stops)
-            : PlanesnomadGame.createAi(s.name());
+            ? new HumanLobbyPlayer(s.name(), bridge, stops).withStartRules(rules)
+            : new SetupAiLobbyPlayer(s.name(), rules);
         rp.setPlayer(player);
         List<IPaperCard> command = new ArrayList<>();
         for (String name : s.commandCards()) {

@@ -80,6 +80,7 @@ popup.text        = #E8E4D8        # text color on it (where text is drawn on th
 | `badge.life` | life total on the portrait | `slice` or `stretch`; text via `badge.life.text` |
 | `badge.count` | counts on piles and history ("×200") | small `slice` pill |
 | `badge.selected` | selection on a pile ("37/200") | |
+| `bubble` | an enemy's speech bubble (its barks), at the board's left edge pointing at its portrait; `bubble.text` = text color | `slice` frame (the tail uses `bubble.fill`) |
 | `reward.backdrop` | dims the board behind the reward screen (after a won fight) | plain fill with alpha |
 | `reward` | the reward screen's panel; `reward.text` = title color | `slice` frame |
 | `reward.item`, `reward.item.hover`, `reward.item.claimed` | one reward row (gold, card choice, relic) | `slice` |

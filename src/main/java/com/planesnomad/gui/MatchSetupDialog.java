@@ -66,7 +66,8 @@ public final class MatchSetupDialog extends JDialog {
         });
         JButton start = new JButton("Start match");
         start.addActionListener(e -> {
-            MatchSetup s = new MatchSetup(you.read(), enemy.read());
+            // Who goes first and each side's start (preset hand, bonus permanents) are kept as they were.
+            MatchSetup s = new MatchSetup(you.read(), enemy.read(), current.firstPlayer());
             List<String> problems = new ArrayList<>();
             for (MatchSetup.Side side : List.of(s.you(), s.enemy())) {
                 for (String n : namesIn(side.look())) {
@@ -198,7 +199,8 @@ public final class MatchSetupDialog extends JDialog {
                 blankToNull(playmat.getText()), feat);
             return new MatchSetup.Side(name.getText().trim().isEmpty() ? original.name() : name.getText().trim(),
                 controller.getSelectedIndex() == 0 ? MatchSetup.Controller.PERSON : MatchSetup.Controller.AI,
-                (String) deck.getSelectedItem(), (Integer) life.getValue(), command.getSelectedValuesList(), look);
+                (String) deck.getSelectedItem(), (Integer) life.getValue(), command.getSelectedValuesList(), look,
+                original.start());
         }
 
         private static String blankToNull(String s) {

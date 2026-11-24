@@ -43,6 +43,8 @@ public final class BoardPanel extends JPanel {
     private int midlineY;
     private CardSnapshot youPlaymat;
     private CardSnapshot enemyPlaymat;
+    private String youPlaymatFile;
+    private String enemyPlaymatFile;
     private boolean playmatsOn = true;
 
     public BoardPanel(CardPreview preview) {
@@ -134,6 +136,8 @@ public final class BoardPanel extends JPanel {
     public void update(MatchSnapshot s) {
         youPlaymat = s.you().playmat();
         enemyPlaymat = s.enemy().playmat();
+        youPlaymatFile = s.you().playmatFile();
+        enemyPlaymatFile = s.enemy().playmatFile();
         fill(s.enemy(), enemyHand, enemyLands, enemyOther, enemyCreatures);
         fill(s.you(), youHand, youLands, youOther, youCreatures);
         setBlocks(s.blocks());
@@ -265,10 +269,10 @@ public final class BoardPanel extends JPanel {
         Graphics2D g = (Graphics2D) g0;
         // Each half: the player's playmat (darkened art), or the plain table color.
         // Each half: the player's playmat, or the theme's table (element table.enemy / table.you).
-        if (!playmatsOn || !Playmats.paint(g, enemyPlaymat, false, 0, 0, getWidth(), midlineY)) {
+        if (!playmatsOn || !Playmats.paint(g, enemyPlaymat, enemyPlaymatFile, false, 0, 0, getWidth(), midlineY)) {
             com.planesnomad.gui.ui.theme.Skin.paint(g, "table.enemy", 0, 0, getWidth(), midlineY);
         }
-        if (!playmatsOn || !Playmats.paint(g, youPlaymat, true, 0, midlineY, getWidth(), getHeight() - midlineY)) {
+        if (!playmatsOn || !Playmats.paint(g, youPlaymat, youPlaymatFile, true, 0, midlineY, getWidth(), getHeight() - midlineY)) {
             com.planesnomad.gui.ui.theme.Skin.paint(g, "table.you", 0, midlineY, getWidth(), getHeight() - midlineY);
         }
         g.setColor(Theme.MIDLINE);
