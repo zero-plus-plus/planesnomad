@@ -291,6 +291,7 @@ public final class HistoryRecorder {
 
     private void add(Kind kind, boolean byYou, String actor, String title, List<String> details,
                      List<CardSnapshot> cards, RelicSnapshot relic, String mergeKey) {
+        title = grammar(title);
         entries.add(new HistoryEntry(++seq, game.getPhaseHandler().getTurn(), kind, byYou, actor, title,
             cap(details, MAX_DETAILS), cap(cards, MAX_CARDS), 1, relic));
         // Merge only with the next event of the same kind in the same step.
@@ -357,7 +358,7 @@ public final class HistoryRecorder {
             cards.add(snap);
         }
         entries.set(entries.size() - 1, new HistoryEntry(last.seq(), last.turn(), last.kind(), last.byYou(),
-            last.actor(), title, details, cards, count, last.relic(), last.effects()));
+            last.actor(), grammar(title), details, cards, count, last.relic(), last.effects()));
     }
 
     // ------------------------------------------------------------------ effects (what an action led to)
@@ -429,6 +430,15 @@ public final class HistoryRecorder {
     }
 
     // ------------------------------------------------------------------ helpers
+
+    private static final java.util.regex.Pattern YOU_VERB =
+        java.util.regex.Pattern.compile("^You (casts|activates|plays|attacks|blocks|takes|creates|wins)\\b");
+
+    /** "You casts" -> "You cast" (the person playing is called "You"). */
+    static String grammar(String title) {
+        java.util.regex.Matcher m = YOU_VERB.matcher(title);
+        return m.find() ? "You " + m.group(1).substring(0, m.group(1).length() - 1) + title.substring(m.end()) : title;
+    }
 
     private Card card(CardView view) {
         if (view == null) {

@@ -42,10 +42,15 @@ public final class TestMatches {
 
     /** Builds a test match by name: "unlimited", "mixed", or anything else for the standard one. */
     public static Match create(String which, CardDb db) {
+        return create(which, db, null);
+    }
+
+    /** @param person the bottom player (e.g. a person playing through the window); null = the AI */
+    public static Match create(String which, CardDb db, forge.LobbyPlayer person) {
         return switch (which == null ? "" : which) {
-            case "unlimited" -> unlimitedWithRelics(db);
-            case "mixed" -> mixedErasWithRelics(db);
-            default -> redVsBlueWithRelics(db);
+            case "unlimited" -> unlimitedWithRelics(db, person);
+            case "mixed" -> mixedErasWithRelics(db, person);
+            default -> redVsBlueWithRelics(db, person);
         };
     }
 
@@ -56,6 +61,11 @@ public final class TestMatches {
      * pictures. Swamps have no test picture on purpose (they show the text frame).
      */
     public static Match unlimitedWithRelics(CardDb db) {
+        return unlimitedWithRelics(db, null);
+    }
+
+    /** @param person the bottom player (e.g. a person playing); null = the AI */
+    public static Match unlimitedWithRelics(CardDb db, forge.LobbyPlayer person) {
         Deck you = new Deck("Unlimited - Black/Red");
         add(you, db, "Black Knight", 4, 1);
         add(you, db, "Terror", 3, 1);
@@ -81,7 +91,7 @@ public final class TestMatches {
 
         RegisteredPlayer red = new RegisteredPlayer(you);
         RegisteredPlayer blue = new RegisteredPlayer(enemy);
-        red.setPlayer(PlanesnomadGame.createAi(YOU));
+        red.setPlayer(person != null ? person : PlanesnomadGame.createAi(YOU));
         blue.setPlayer(PlanesnomadGame.createAi(ENEMY));
         red.addExtraCardsInCommandZone(List.of(
             db.getCard(RelicTest.PASSIVE), db.getCard(RelicTest.TRIGGERED),
@@ -96,6 +106,11 @@ public final class TestMatches {
      * (current frame). Swamps have no test picture on purpose (they show the text frame).
      */
     public static Match mixedErasWithRelics(CardDb db) {
+        return mixedErasWithRelics(db, null);
+    }
+
+    /** @param person the bottom player (e.g. a person playing); null = the AI */
+    public static Match mixedErasWithRelics(CardDb db, forge.LobbyPlayer person) {
         Deck you = new Deck("Mixed eras - Red/Green");
         add(you, db, "Monastery Swiftspear", "KTK", 3, 1);
         add(you, db, "Heir of the Wilds", "KTK", 3, 1);
@@ -130,7 +145,7 @@ public final class TestMatches {
 
         RegisteredPlayer red = new RegisteredPlayer(you);
         RegisteredPlayer blue = new RegisteredPlayer(enemy);
-        red.setPlayer(PlanesnomadGame.createAi(YOU));
+        red.setPlayer(person != null ? person : PlanesnomadGame.createAi(YOU));
         blue.setPlayer(PlanesnomadGame.createAi(ENEMY));
         red.addExtraCardsInCommandZone(List.of(
             db.getCard(RelicTest.PASSIVE), db.getCard(RelicTest.TRIGGERED),
@@ -159,9 +174,14 @@ public final class TestMatches {
 
     /** Red (bottom, "you") starts with the four example relics/consumables. */
     public static Match redVsBlueWithRelics(CardDb db) {
+        return redVsBlueWithRelics(db, null);
+    }
+
+    /** @param person the bottom player (e.g. a person playing); null = the AI */
+    public static Match redVsBlueWithRelics(CardDb db, forge.LobbyPlayer person) {
         RegisteredPlayer red = new RegisteredPlayer(PlanesnomadGame.buildRedDeck(db));
         RegisteredPlayer blue = new RegisteredPlayer(PlanesnomadGame.buildBlueDeck(db));
-        red.setPlayer(PlanesnomadGame.createAi(YOU));
+        red.setPlayer(person != null ? person : PlanesnomadGame.createAi(YOU));
         blue.setPlayer(PlanesnomadGame.createAi(ENEMY));
         red.addExtraCardsInCommandZone(List.of(
             db.getCard(RelicTest.PASSIVE), db.getCard(RelicTest.TRIGGERED),

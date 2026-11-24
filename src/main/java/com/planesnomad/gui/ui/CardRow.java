@@ -49,6 +49,7 @@ public final class CardRow extends JComponent {
     private boolean stackLandsFully;
     private boolean separateArts;
     private List<CardSnapshot> cards = List.of();
+    private Point pressedAt;
     private List<Pile> piles = List.of();
     /** One hit box per pile (a single card is a pile of one), in drawing order. */
     private final List<Rectangle> hitBoxes = new ArrayList<>();
@@ -85,6 +86,7 @@ public final class CardRow extends JComponent {
 
             @Override
             public void mousePressed(MouseEvent e) {
+                pressedAt = SwingUtilities.isLeftMouseButton(e) ? e.getPoint() : null;
                 if (SwingUtilities.isLeftMouseButton(e) && maxScroll > 0) {
                     dragFromX = e.getX();
                     dragFromScroll = scroll;
@@ -105,6 +107,18 @@ public final class CardRow extends JComponent {
             public void mouseReleased(MouseEvent e) {
                 dragFromX = Integer.MIN_VALUE;
                 maybeMenu(e);
+                // A click = press and release on the same card without dragging the row. Handled
+                // here rather than in mouseClicked, which Swing drops when the mouse moves even a
+                // pixel and which made quick clicks on several cards (e.g. attackers) feel slow.
+                Point from = pressedAt;
+                pressedAt = null;
+                if (from != null && SwingUtilities.isLeftMouseButton(e) && interaction != null
+                    && from.distance(e.getPoint()) <= Math.max(6, Theme.px(6))) {
+                    int i = pileAt(e.getPoint());
+                    if (i >= 0 && i == pileAt(from)) {
+                        interaction.click(CardRow.this, piles.get(i), e);
+                    }
+                }
             }
         };
         addMouseListener(mouse);
@@ -119,6 +133,32 @@ public final class CardRow extends JComponent {
                 getParent().dispatchEvent(SwingUtilities.convertMouseEvent(this, e, getParent()));
             }
         });
+    }
+
+    // ------------------------------------------------------------------ playing (human input)
+
+    /**
+     * While a person plays: which cards to highlight (playable, targetable, chosen) and what a
+     * left-click on a card or pile does. Null when nothing is being asked.
+     */
+    public interface Interaction {
+        /** Highlight color for this card, or null. */
+        Color mark(CardSnapshot card);
+
+        void click(CardRow row, Pile pile, MouseEvent e);
+    }
+
+    private Interaction interaction;
+    private java.util.function.Consumer<MouseEvent> emptyMenu;
+
+    /** Right-click on empty space in this row: e.g. the board's menu. */
+    public void setEmptyMenu(java.util.function.Consumer<MouseEvent> menu) {
+        emptyMenu = menu;
+    }
+
+    public void setInteraction(Interaction i) {
+        interaction = i;
+        repaint();
     }
 
     /** Horizontal pan of a row too long to show (pixels from the start), and its maximum. */
@@ -185,6 +225,99 @@ public final class CardRow extends JComponent {
         repaint();
     }
 
+    /** Cards aimed at by something on the stack: id -> color of the player aiming. */
+    private Map<Integer, Color> targetMarks = Map.of();
+    private int lastCw;
+    private int lastCh;
+
+    /**
+     * Marks the cards a stack item targets (crosshair, glow, "TARGET" tag). A targeted card is
+     * taken out of its pile, so it's clear which one of several identical cards is meant.
+     */
+    public void setTargetMarks(Map<Integer, Color> marks) {
+        Map<Integer, Color> m = marks == null ? Map.of() : Map.copyOf(marks);
+        if (m.equals(targetMarks)) {
+            return;
+        }
+        boolean regroup = !m.keySet().equals(targetMarks.keySet());
+        targetMarks = m;
+        if (regroup) {
+            regroup();
+        }
+        repaint();
+    }
+
+    public boolean hasTargetMarks() {
+        return cards.stream().anyMatch(c -> targetMarks.containsKey(c.id()));
+    }
+
+    /**
+     * Where a card is drawn in this row (its pile's top card), or null if it isn't in this row or
+     * hasn't been drawn yet. Used to point arrows at targets.
+     */
+    public Rectangle cardBounds(int id) {
+        for (int i = 0; i < Math.min(piles.size(), hitBoxes.size()); i++) {
+            Pile p = piles.get(i);
+            if (p.cards().stream().anyMatch(c -> c.id() == id)) {
+                Rectangle box = hitBoxes.get(i);
+                CardSnapshot top = p.top();
+                int baseW = top.tapped() ? lastCh : lastCw;
+                return visible(top, new Rectangle(box.x, box.y, baseW, lastCh), lastCw, lastCh);
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Combat: cards that should sit opposite another card (a blocker across from the attacker it
+     * blocks), and where: center x in this row's coordinates, or null if unknown right now.
+     */
+    private Set<Integer> anchoredIds = Set.of();
+    private java.util.function.IntFunction<Integer> anchorX = id -> null;
+    private Runnable onLayoutChanged = () -> { };
+    private int layoutSignature;
+
+    public void setAnchors(Set<Integer> ids, java.util.function.IntFunction<Integer> centerX) {
+        Set<Integer> s = ids == null ? Set.of() : Set.copyOf(ids);
+        anchorX = centerX == null ? id -> null : centerX;
+        if (!s.equals(anchoredIds)) {
+            anchoredIds = s;
+            regroup();
+        }
+        repaint();
+    }
+
+    /** Called after a paint that moved cards (e.g. so the row across can line its blockers up). */
+    public void onLayoutChanged(Runnable r) {
+        onLayoutChanged = r == null ? () -> { } : r;
+    }
+
+    /** Takes targeted (and anchored) cards out of their piles (each becomes a pile of one, right after it). */
+    private List<Pile> splitTargets(List<Pile> in) {
+        if (targetMarks.isEmpty() && anchoredIds.isEmpty()) {
+            return in;
+        }
+        List<Pile> out = new ArrayList<>();
+        for (Pile p : in) {
+            List<CardSnapshot> rest = new ArrayList<>();
+            List<CardSnapshot> aimed = new ArrayList<>();
+            for (CardSnapshot c : p.cards()) {
+                (p.isPile() && (targetMarks.containsKey(c.id()) || anchoredIds.contains(c.id())) ? aimed : rest).add(c);
+            }
+            if (aimed.isEmpty()) {
+                out.add(p);
+                continue;
+            }
+            if (!rest.isEmpty()) {
+                out.add(new Pile(p.key(), p.baseKey(), rest));
+            }
+            for (CardSnapshot c : aimed) {
+                out.add(new Pile("#" + c.id(), "#" + c.id(), List.of(c)));
+            }
+        }
+        return out;
+    }
+
     private void regroup() {
         if (grouping) {
             // Forget choices for cards that are gone, so a new group starts with the default.
@@ -193,7 +326,7 @@ public final class CardRow extends JComponent {
                 .forEach(p -> present.add(p.baseKey()));
             separated.retainAll(present);
             combined.retainAll(present);
-            piles = CardGroups.group(cards, landRow, stackLandsFully, separateArts, separated, combined);
+            piles = splitTargets(CardGroups.group(cards, landRow, stackLandsFully, separateArts, separated, combined));
         } else {
             List<Pile> singles = new ArrayList<>();
             for (CardSnapshot c : cards) {
@@ -327,15 +460,20 @@ public final class CardRow extends JComponent {
     // ------------------------------------------------------------------ right-click menu
 
     private void maybeMenu(MouseEvent e) {
-        if (!e.isPopupTrigger() && !(SwingUtilities.isRightMouseButton(e) && e.getID() == MouseEvent.MOUSE_PRESSED)) {
+        // Right button pressed (on every system; the release isn't used, so the menu opens once).
+        if (!(SwingUtilities.isRightMouseButton(e) && e.getID() == MouseEvent.MOUSE_PRESSED)) {
             return;
-        }
-        if (!grouping) {
-            return;   // hands: a card menu comes with human play
         }
         int i = pileAt(e.getPoint());
         if (i < 0) {
+            if (emptyMenu != null) {
+                emptyMenu.accept(e);   // empty space: the board's menu (auto-tap, auto-pass, stops)
+                e.consume();
+            }
             return;
+        }
+        if (!grouping) {
+            return;   // hands: a card menu comes later
         }
         JPopupMenu menu = buildMenu(piles.get(i));
         menu.show(this, e.getX(), e.getY());
@@ -444,6 +582,8 @@ public final class CardRow extends JComponent {
         int pad = Math.max(2, Theme.px(4));
         int ch = getHeight() - 2 * pad;          // card height
         int cw = (int) (ch * Theme.CARD_ASPECT); // card width
+        lastCw = cw;
+        lastCh = ch;
         if (ch <= 8 || piles.isEmpty()) {
             if (piles.isEmpty() && label != null) {
                 g.setFont(Theme.font(Font.ITALIC, 11));
@@ -492,19 +632,89 @@ public final class CardRow extends JComponent {
             scroll = maxScroll;
         }
         int x = pad - scroll + Math.max(0, (available - Math.min(content, available)) / 2);
+        int[] xs = new int[n];
+        for (int i = 0; i < n; i++) {
+            xs[i] = x;
+            x += squeezed ? (int) Math.floor(widths[i] + squeeze) : widths[i] + gap;
+        }
+        if (!squeezed && !anchoredIds.isEmpty()) {
+            placeAnchored(xs, widths, gap, pad, available);
+        }
+        int signature = 1;
         for (int i = 0; i < n; i++) {
             Pile pile = piles.get(i);
             CardSnapshot top = pile.top();
             int nudge = top.attacking() ? (towardBottom ? pad * 2 : -pad * 2) : 0;
-            Rectangle box = new Rectangle(x, pad + nudge, widths[i], ch);
+            Rectangle box = new Rectangle(xs[i], pad + nudge, widths[i], ch);
             hitBoxes.add(box);
             drawPile(g, pile, box, cw, ch, offset);
-            x += squeezed ? (int) Math.floor(widths[i] + squeeze) : widths[i] + gap;
+            signature = 31 * signature + top.id() * 7 + xs[i] * 131 + widths[i];
+        }
+        if (signature != layoutSignature) {
+            layoutSignature = signature;
+            javax.swing.SwingUtilities.invokeLater(onLayoutChanged);
         }
         if (maxScroll > 0) {
             paintPanHints(g, pad, ch);
         }
         g.dispose();
+    }
+
+    /**
+     * Moves anchored piles (blockers) to sit across from their anchor (the attacker), side by side
+     * when several share one; the other cards keep their order and make room. Nothing overlaps.
+     */
+    private void placeAnchored(int[] xs, int[] widths, int gap, int pad, int available) {
+        int n = xs.length;
+        double[] want = new double[n];
+        Map<Integer, List<Integer>> byAnchor = new LinkedHashMap<>();
+        for (int i = 0; i < n; i++) {
+            want[i] = xs[i];
+            int id = piles.get(i).top().id();
+            Integer ax = anchoredIds.contains(id) ? anchorX.apply(id) : null;
+            if (ax != null) {
+                byAnchor.computeIfAbsent(ax, k -> new ArrayList<>()).add(i);
+            }
+        }
+        if (byAnchor.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<Integer, List<Integer>> e : byAnchor.entrySet()) {
+            List<Integer> group = e.getValue();
+            int total = -gap;
+            for (int i : group) {
+                total += widths[i] + gap;
+            }
+            double left = e.getKey() - total / 2.0;
+            for (int i : group) {
+                want[i] = left;
+                left += widths[i] + gap;
+            }
+        }
+        // Order by wanted position, then push apart left to right and pull back inside the row.
+        Integer[] order = new Integer[n];
+        for (int i = 0; i < n; i++) {
+            order[i] = i;
+        }
+        java.util.Arrays.sort(order, (a, b) -> Double.compare(want[a], want[b]));
+        int minX = pad;
+        int maxRight = pad + available;
+        double prevEnd = Double.NEGATIVE_INFINITY;
+        double[] at = new double[n];
+        for (int k = 0; k < n; k++) {
+            int i = order[k];
+            at[i] = Math.max(Math.max(want[i], minX), prevEnd + gap);
+            prevEnd = at[i] + widths[i];
+        }
+        double nextStart = Double.POSITIVE_INFINITY;
+        for (int k = n - 1; k >= 0; k--) {
+            int i = order[k];
+            at[i] = Math.min(at[i], Math.min(maxRight, nextStart - gap) - widths[i]);
+            nextStart = at[i];
+        }
+        for (int i = 0; i < n; i++) {
+            xs[i] = (int) Math.round(at[i]);
+        }
     }
 
     /** Smallest share of a card kept visible when a row overlaps; beyond that the row pans. */
@@ -568,6 +778,10 @@ public final class CardRow extends JComponent {
         Rectangle topBox = new Rectangle(box.x, box.y, baseW, ch);
         int selected = selectedIn(pile.key());
         drawCard(g, top, topBox, cw, ch, selected > 0);
+        Color aimed = targetMarks.get(top.id());
+        if (aimed != null) {
+            TargetMarks.paint(g, visible(top, topBox, cw, ch), aimed);
+        }
         if (pile.count() > drawn || selected > 0) {
             badge(g, visible(top, topBox, cw, ch), pile.count(), selected);
         }
@@ -612,8 +826,22 @@ public final class CardRow extends JComponent {
     }
 
     private void outline(Graphics2D g, CardSnapshot card, Rectangle r, boolean selected) {
+        Color mark = interaction == null ? null : interaction.mark(card);
+        if (mark != null) {
+            // Something you can do with this card now (play it, target it, attack or block with it):
+            // a soft glow around it, stronger when hovered.
+            boolean hot = hovered != null && hovered.id() == card.id();
+            int arc = Math.max(4, r.width / 10);
+            for (int i = 3; i >= 1; i--) {
+                int grow = Theme.px(1.4) * i;
+                g.setColor(new Color(mark.getRed(), mark.getGreen(), mark.getBlue(), (hot ? 90 : 55) + (3 - i) * 35));
+                g.setStroke(new BasicStroke(Math.max(1.5f, Theme.px(1.6))));
+                g.drawRoundRect(r.x - grow, r.y - grow, r.width - 1 + 2 * grow, r.height - 1 + 2 * grow, arc + grow, arc + grow);
+            }
+        }
         Color color = card.attacking() ? Theme.ATTACKING
             : card.blocking() ? Theme.BLOCKING
+            : mark != null ? mark
             : selected || hovered != null && hovered.id() == card.id() ? Theme.ACCENT : null;
         if (color == null) {
             return;

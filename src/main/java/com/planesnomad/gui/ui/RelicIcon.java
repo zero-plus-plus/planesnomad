@@ -47,6 +47,22 @@ public final class RelicIcon extends JComponent {
         this.size = size;
         this.consumableSlot = consumableSlot;
         setOpaque(false);
+        addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                if (javax.swing.SwingUtilities.isLeftMouseButton(e) && onClick != null && relic != null) {
+                    onClick.accept(relic.name());
+                }
+            }
+        });
+    }
+
+    /** Left-click on the relic (e.g. to use it while playing); receives the relic's name. */
+    private java.util.function.Consumer<String> onClick;
+
+    public void setOnClick(java.util.function.Consumer<String> click) {
+        onClick = click;
+        setCursor(java.awt.Cursor.getPredefinedCursor(click != null ? java.awt.Cursor.HAND_CURSOR : java.awt.Cursor.DEFAULT_CURSOR));
     }
 
     public void setRelic(RelicSnapshot relic) {

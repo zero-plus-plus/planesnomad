@@ -38,7 +38,7 @@ public final class SnapshotBuilder {
     private static final Set<GameLogEntryType> LOG_TYPES = EnumSet.of(
         GameLogEntryType.TURN, GameLogEntryType.LAND, GameLogEntryType.STACK_ADD,
         GameLogEntryType.STACK_RESOLVE, GameLogEntryType.COMBAT, GameLogEntryType.DAMAGE,
-        GameLogEntryType.LIFE, GameLogEntryType.GAME_OUTCOME);
+        GameLogEntryType.LIFE, GameLogEntryType.GAME_OUTCOME, GameLogEntryType.INFORMATION);
 
     private final Game game;
     private final Player you;
@@ -67,7 +67,7 @@ public final class SnapshotBuilder {
     }
 
     /** A snapshot of a card by name (its default printing), for portraits, playmats, featured cards. */
-    static CardSnapshot named(String name) {
+    public static CardSnapshot named(String name) {
         if (name == null || name.isBlank() || forge.StaticData.instance() == null) {
             return null;
         }
@@ -117,20 +117,22 @@ public final class SnapshotBuilder {
         String result = null;
         if (game.isGameOver() && game.getOutcome() != null) {
             var outcome = game.getOutcome();
-            result = outcome.isDraw() ? "Draw"
-                : outcome.getWinningPlayer().getPlayer().getName() + " wins";
+            String winner = outcome.isDraw() ? null : outcome.getWinningPlayer().getPlayer().getName();
+            result = winner == null ? "Draw" : winner.equals("You") ? "You win" : winner + " wins";
         }
 
         return new MatchSnapshot(
             ph.getTurn(),
             active == null ? "" : active.getName(),
             phase,
-            player(you, youLook.subtitle(), true, youPortrait, youPlaymat, youFeatured),
-            player(enemy, enemyLook.subtitle(), revealEnemyHand, enemyPortrait, enemyPlaymat, enemyFeatured),
+            player(you, youLook.subtitle(), true, youPortrait, youPlaymat, youFeatured, youLook.featuredNotes()),
+            player(enemy, enemyLook.subtitle(), revealEnemyHand, enemyPortrait, enemyPlaymat, enemyFeatured,
+                enemyLook.featuredNotes()),
             stack(),
             log(),
             result,
-            history == null ? List.of() : history.entries()
+            history == null ? List.of() : history.entries(),
+            blocks()
         );
     }
 
@@ -158,7 +160,8 @@ public final class SnapshotBuilder {
     // ------------------------------------------------------------------ players
 
     private PlayerSnapshot player(Player p, String subtitle, boolean handVisible,
-                                  CardSnapshot portrait, CardSnapshot playmat, List<CardSnapshot> featured) {
+                                  CardSnapshot portrait, CardSnapshot playmat, List<CardSnapshot> featured,
+                                  java.util.Map<String, String> featuredNotes) {
         List<CardSnapshot> hand = new ArrayList<>();
         for (Card c : p.getCardsIn(ZoneType.Hand)) {
             hand.add(handVisible ? card(c) : CardSnapshot.hidden(c.getId()));
@@ -178,7 +181,8 @@ public final class SnapshotBuilder {
             p.hasLost(),
             portrait,
             playmat,
-            featured
+            featured,
+            featuredNotes
         );
     }
 
@@ -469,6 +473,25 @@ public final class SnapshotBuilder {
 
     // ------------------------------------------------------------------ stack and log
 
+    /** Who blocks whom in the current combat: blocker id -> attacker ids. */
+    private java.util.Map<Integer, List<Integer>> blocks() {
+        java.util.Map<Integer, List<Integer>> out = new java.util.HashMap<>();
+        try {
+            var combat = game.getCombat();
+            if (combat == null) {
+                return out;
+            }
+            for (Card attacker : combat.getAttackers()) {
+                for (Card blocker : combat.getBlockers(attacker)) {
+                    out.computeIfAbsent(blocker.getId(), k -> new ArrayList<>()).add(attacker.getId());
+                }
+            }
+        } catch (RuntimeException e) {
+            // display only
+        }
+        return out;
+    }
+
     private List<StackItem> stack() {
         List<StackItem> out = new ArrayList<>();
         // The engine resolves an item while it is still on the stack (it is removed afterwards).
@@ -503,10 +526,54 @@ public final class SnapshotBuilder {
                 kind,
                 sa != null && sa == resolvingNow,
                 source == null ? null : stackCard(source, kind, detail),
-                source == null ? null : relicOf(source)));
+                source == null ? null : relicOf(source),
+                si.getId(),
+                targets(sa)));
         }
         return out;
     }
+
+    /** What a stack item targets, its sub-abilities included (e.g. "Counter target spell. Draw..."). */
+    private List<MatchSnapshot.Target> targets(SpellAbility sa) {
+        List<MatchSnapshot.Target> out = new ArrayList<>();
+        if (sa == null) {
+            return out;
+        }
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        try {
+            for (forge.game.spellability.TargetChoices tc : sa.getAllTargetChoices()) {
+                if (tc == null) {
+                    continue;
+                }
+                for (Card c : tc.getTargetCards()) {
+                    if (seen.add("c" + c.getId())) {
+                        Player ctrl = c.getController();
+                        out.add(new MatchSnapshot.Target(MatchSnapshot.Target.Kind.CARD, c.getId(), c.getName(), ctrl == you));
+                    }
+                }
+                for (Player p : tc.getTargetPlayers()) {
+                    if (seen.add("p" + p.getName())) {
+                        out.add(new MatchSnapshot.Target(MatchSnapshot.Target.Kind.PLAYER, 0, p.getName(), p == you));
+                    }
+                }
+                for (SpellAbility target : tc.getTargetSpells()) {
+                    SpellAbilityStackInstance si = game.getStack().getInstanceMatchingSpellAbilityID(target);
+                    int id = si == null ? 0 : si.getId();
+                    Card host = target.getHostCard();
+                    if (seen.add("s" + id)) {
+                        out.add(new MatchSnapshot.Target(MatchSnapshot.Target.Kind.STACK, id,
+                            host == null ? "a spell" : host.getName(), target.getActivatingPlayer() == you));
+                    }
+                }
+            }
+        } catch (RuntimeException e) {
+            // Showing targets must never break the match.
+        }
+        return out;
+    }
+
+    /** Log lines written by our own match rules (guaranteed draws), shown although engine notes aren't. */
+    public static final String GUARANTEED_PREFIX = "Guaranteed: ";
 
     private static final java.util.regex.Pattern CARD_ID = java.util.regex.Pattern.compile(" \\(\\d+\\)");
     /** The engine's label at the end of a trigger's text, e.g. "[Phase: Red AI]", "[Zone Changer: X]". */
@@ -523,6 +590,9 @@ public final class SnapshotBuilder {
         String msg = e.message();
         if (msg == null || msg.isBlank()) {
             return null;
+        }
+        if (e.type() == GameLogEntryType.INFORMATION && !msg.startsWith(GUARANTEED_PREFIX)) {
+            return null;   // engine notes; only our own "Guaranteed: ..." lines are shown
         }
         String first = CARD_ID.matcher(msg.split("\n")[0].trim()).replaceAll("");
         if (TRIGGER_LABEL.matcher(first).find()) {

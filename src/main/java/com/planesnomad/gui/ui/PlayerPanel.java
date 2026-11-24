@@ -59,6 +59,37 @@ public final class PlayerPanel extends JPanel {
     private List<CardSnapshot> exileCards = List.of();
     private List<RelicSnapshot> shownEffects = List.of();
     private List<CardSnapshot> shownFeatured = List.of();
+    /** While a person plays: highlight for the portrait (e.g. a legal target), and its click. */
+    private java.util.function.Function<String, Color> portraitMark;
+    private java.util.function.Consumer<String> portraitClick;
+
+    public void setPortraitInteraction(java.util.function.Function<String, Color> mark,
+                                       java.util.function.Consumer<String> click) {
+        portraitMark = mark;
+        portraitClick = click;
+        portrait.repaint();
+    }
+
+    /** Color of the player whose stack item targets this player, or null. */
+    private Color targetedBy;
+
+    /** Marks the portrait as the target of a stack item (crosshair, glow, "TARGET" tag). */
+    public void setTargetMark(Color c) {
+        if (!java.util.Objects.equals(c, targetedBy)) {
+            targetedBy = c;
+            portrait.repaint();
+        }
+    }
+
+    public Color targetMark() {
+        return targetedBy;
+    }
+
+    /** The portrait, e.g. for arrows pointing at it. */
+    public javax.swing.JComponent portraitComponent() {
+        return portrait;
+    }
+
     /** Latest snapshot of this player, for the portrait's info pop-up. */
     private PlayerSnapshot last;
     private final PlayerInfoPopup info;
@@ -129,7 +160,12 @@ public final class PlayerPanel extends JPanel {
 
     public void update(PlayerSnapshot p) {
         last = p;
-        name.setText(p.name() + (p.activeTurn() ? "  ●" : ""));
+        String nameText = p.name() + (p.activeTurn() ? "  ●" : "");
+        if (!nameText.equals(name.getText())) {
+            name.setText(nameText);
+            name.setPreferredSize(null);   // measure the new text (a short name grew by the turn marker)
+            revalidate();
+        }
         subtitle.setText(p.subtitle() == null ? "" : p.subtitle());
         subtitle.setToolTipText(p.subtitle());
         portrait.card = p.portrait();
@@ -168,7 +204,7 @@ public final class PlayerPanel extends JPanel {
             effects.add(Box.createHorizontalStrut(Theme.px(6)));
         }
         for (CardSnapshot c : shownFeatured) {
-            effects.add(new FeaturedCard(c));
+            effects.add(new FeaturedCard(c, last == null ? null : last.featuredNotes().get(c.name())));
         }
         effects.setVisible(!shownEffects.isEmpty() || !shownFeatured.isEmpty());
         effects.revalidate();
@@ -240,6 +276,13 @@ public final class PlayerPanel extends JPanel {
                 public void mouseExited(MouseEvent e) {
                     info.hide();
                 }
+
+                @Override
+                public void mouseClicked(MouseEvent e) {
+                    if (javax.swing.SwingUtilities.isLeftMouseButton(e) && portraitClick != null && last != null) {
+                        portraitClick.accept(last.name());
+                    }
+                }
             };
             addMouseListener(hover);
             addMouseMotionListener(hover);
@@ -275,9 +318,13 @@ public final class PlayerPanel extends JPanel {
                 g.setColor(new Color(255, 255, 255, 120));
                 g.drawString(initial, (w - fm.stringWidth(initial)) / 2, (h + fm.getAscent() - fm.getDescent()) / 2);
             }
-            g.setColor(color);
-            g.setStroke(new BasicStroke(Math.max(1.5f, Theme.px(2))));
+            Color mark = portraitMark == null || last == null ? null : portraitMark.apply(last.name());
+            g.setColor(mark != null ? mark : color);
+            g.setStroke(new BasicStroke(Math.max(1.5f, Theme.px(mark != null ? 4 : 2))));
             g.draw(new RoundRectangle2D.Double(1, 1, w - 3, h - 3, arc, arc));
+            if (targetedBy != null) {
+                TargetMarks.paint(g, new java.awt.Rectangle(Theme.px(6), Theme.px(6), w - Theme.px(12), h - Theme.px(12)), targetedBy);
+            }
 
             // Life badge (themed element "badge.life", number font)
             g.setFont(Theme.font(Theme.FontRole.NUMBERS, Font.BOLD, 24));
@@ -296,9 +343,12 @@ public final class PlayerPanel extends JPanel {
     /** A guaranteed card in the enemy's effects bar: art thumbnail, hover for the full card. */
     private final class FeaturedCard extends JComponent {
         private final CardSnapshot card;
+        /** e.g. "Turn 2": drawn as a small badge ("T2") on the thumbnail. */
+        private final String note;
 
-        FeaturedCard(CardSnapshot card) {
+        FeaturedCard(CardSnapshot card, String note) {
             this.card = card;
+            this.note = note;
             MouseAdapter hover = new MouseAdapter() {
                 @Override
                 public void mouseMoved(MouseEvent e) {
@@ -329,6 +379,20 @@ public final class PlayerPanel extends JPanel {
             Graphics2D g = (Graphics2D) g0;
             int pad = Theme.px(2);
             CardPainter.paintArt(g, card, pad, pad, getWidth() - 2 * pad, getHeight() - 2 * pad);
+            if (note != null && !note.isBlank()) {
+                String text = note.replaceFirst("(?i)^turn\\s*", "T");
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+                g.setFont(Theme.font(Theme.FontRole.NUMBERS, java.awt.Font.BOLD, 9));
+                java.awt.FontMetrics fm = g.getFontMetrics();
+                int bw = fm.stringWidth(text) + Theme.px(5);
+                int bh = fm.getAscent() + Theme.px(1);
+                int bx = getWidth() - bw;
+                int by = getHeight() - bh;
+                com.planesnomad.gui.ui.theme.Skin.paint(g, "badge.count", bx, by, bw, bh);
+                g.setColor(com.planesnomad.gui.ui.theme.Skin.text("badge.count", Theme.TEXT));
+                g.drawString(text, bx + Theme.px(2.5), by + fm.getAscent());
+            }
         }
     }
 }

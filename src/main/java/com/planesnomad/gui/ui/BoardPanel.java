@@ -5,7 +5,12 @@ import com.planesnomad.gui.model.MatchSnapshot;
 import com.planesnomad.gui.model.PlayerSnapshot;
 
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 import java.awt.BasicStroke;
+import java.awt.Color;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.util.Map;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.util.List;
@@ -60,6 +65,20 @@ public final class BoardPanel extends JPanel {
         enemyLands.setGrouping(true, true);
         youLands.setGrouping(true, true);
 
+        // Blockers line up across from their attackers: when one creature row moves, the other follows.
+        enemyCreatures.onLayoutChanged(() -> {
+            if (!blocks.isEmpty()) {
+                youCreatures.repaint();
+                repaint();
+            }
+        });
+        youCreatures.onLayoutChanged(() -> {
+            if (!blocks.isEmpty()) {
+                enemyCreatures.repaint();
+                repaint();
+            }
+        });
+
         add(enemyHand, HAND_ENEMY);
         add(enemyLands, LANDS);
         add(enemyOther, OTHER);
@@ -87,6 +106,21 @@ public final class BoardPanel extends JPanel {
     }
 
     /** All battlefield rows, enemy's first. */
+    /** y of the middle line between the two halves, in this panel's coordinates. */
+    public int midline() {
+        return midlineY;
+    }
+
+    /** Every row: hands and battlefields. */
+    public List<CardRow> allRows() {
+        return List.of(enemyHand, enemyLands, enemyOther, enemyCreatures, youCreatures, youOther, youLands, youHand);
+    }
+
+    /** Top of your hand row, in this panel's coordinates (the prompt bar sits just above it). */
+    public int yourHandTop() {
+        return youHand.getY();
+    }
+
     public List<CardRow> battlefieldRows() {
         return List.of(enemyLands, enemyOther, enemyCreatures, youCreatures, youOther, youLands);
     }
@@ -102,6 +136,109 @@ public final class BoardPanel extends JPanel {
         enemyPlaymat = s.enemy().playmat();
         fill(s.enemy(), enemyHand, enemyLands, enemyOther, enemyCreatures);
         fill(s.you(), youHand, youLands, youOther, youCreatures);
+        setBlocks(s.blocks());
+    }
+
+    /** Blocker id -> attacker ids: from the engine, plus blocks you're still choosing. */
+    private Map<Integer, List<Integer>> blocks = Map.of();
+
+    /**
+     * Shows who blocks whom: each blocker sits across from the attacker it blocks (several blockers
+     * side by side), with a small arrow from blocker to attacker.
+     */
+    public void setBlocks(Map<Integer, List<Integer>> b) {
+        Map<Integer, List<Integer>> m = b == null ? Map.of() : Map.copyOf(b);
+        if (m.equals(blocks)) {
+            return;
+        }
+        blocks = m;
+        for (CardRow row : List.of(enemyCreatures, youCreatures)) {
+            CardRow other = row == enemyCreatures ? youCreatures : enemyCreatures;
+            row.setAnchors(m.keySet(), id -> {
+                List<Integer> attackers = blocks.get(id);
+                if (attackers == null || attackers.isEmpty()) {
+                    return null;
+                }
+                Rectangle r = other.cardBounds(attackers.get(0));
+                if (r == null) {
+                    return null;
+                }
+                Point c = SwingUtilities.convertPoint(other, r.x + r.width / 2, 0, row);
+                return c.x;
+            });
+        }
+        repaint();
+    }
+
+    /** Small arrows from each blocker to the attacker it blocks, over the rows. */
+    @Override
+    protected void paintChildren(Graphics g0) {
+        super.paintChildren(g0);
+        if (blocks.isEmpty()) {
+            return;
+        }
+        Graphics2D g = (Graphics2D) g0.create();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+        for (Map.Entry<Integer, List<Integer>> e : blocks.entrySet()) {
+            Rectangle b = bounds(e.getKey());
+            if (b == null) {
+                continue;
+            }
+            for (int attacker : e.getValue()) {
+                Rectangle a = bounds(attacker);
+                if (a != null) {
+                    blockArrow(g, b, a);
+                }
+            }
+        }
+        g.dispose();
+    }
+
+    /** A card's rectangle in this panel, from whichever creature row holds it. */
+    private Rectangle bounds(int id) {
+        for (CardRow row : List.of(enemyCreatures, youCreatures)) {
+            Rectangle r = row.cardBounds(id);
+            if (r != null) {
+                return SwingUtilities.convertRectangle(row, r, this);
+            }
+        }
+        return null;
+    }
+
+    private static void blockArrow(Graphics2D g, Rectangle blocker, Rectangle attacker) {
+        boolean up = attacker.y < blocker.y;
+        double x1 = blocker.getCenterX();
+        double y1 = up ? blocker.y + Theme.px(4) : blocker.y + blocker.height - Theme.px(4);
+        double x2 = attacker.getCenterX();
+        double y2 = up ? attacker.y + attacker.height - Theme.px(4) : attacker.y + Theme.px(4);
+        double len = Math.hypot(x2 - x1, y2 - y1);
+        if (len < 4) {
+            return;
+        }
+        float w = Math.max(2.5f, Theme.px(3.5));
+        java.awt.geom.Line2D line = new java.awt.geom.Line2D.Double(x1, y1, x2, y2);
+        g.setColor(new Color(0, 0, 0, 160));
+        g.setStroke(new BasicStroke(w + 2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(line);
+        g.setColor(Theme.BLOCKING);
+        g.setStroke(new BasicStroke(w, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        g.draw(line);
+        double ang = Math.atan2(y2 - y1, x2 - x1);
+        double hl = Math.max(9, Theme.px(13));
+        double hw = hl * 0.65;
+        java.awt.geom.Path2D.Double head = new java.awt.geom.Path2D.Double();
+        head.moveTo(x2, y2);
+        head.lineTo(x2 - hl * Math.cos(ang) + hw * Math.sin(ang), y2 - hl * Math.sin(ang) - hw * Math.cos(ang));
+        head.lineTo(x2 - hl * Math.cos(ang) - hw * Math.sin(ang), y2 - hl * Math.sin(ang) + hw * Math.cos(ang));
+        head.closePath();
+        g.setStroke(new BasicStroke(2f));
+        g.setColor(new Color(0, 0, 0, 170));
+        g.draw(head);
+        g.setColor(Theme.BLOCKING);
+        g.fill(head);
+        // A small shield-like dot where the arrow leaves the blocker.
+        int d = (int) Math.max(7, w * 2.4);
+        g.fillOval((int) x1 - d / 2, (int) y1 - d / 2, d, d);
     }
 
     private static void fill(PlayerSnapshot p, CardRow hand, CardRow lands, CardRow other, CardRow creatures) {

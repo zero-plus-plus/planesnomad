@@ -94,6 +94,8 @@ public final class ThemeTest {
 
         // 4. The screen changes with the theme, and switching back restores it.
         ForgeEngine.initialize();
+        // No downloads here: pictures arriving between two renders would make them differ.
+        System.setProperty("planesnomad.downloads", "false");
         var images = ImageSetup.create();
         MatchSnapshot snap = com.planesnomad.gui.StressTest.board(com.planesnomad.ForgeEngine.initialize(), images, "a-20-creatures");
         images.preloadNow(snap.you().battlefield());
