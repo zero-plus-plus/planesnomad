@@ -1,0 +1,85 @@
+# Test builds for players: every merge to main (or a manual run) builds the game from this
+# repository, runs the key tests, and publishes a GitHub release "test-build-<n>" with:
+#   Planesnomad-test-build-<n>.zip   first install: unzip, double-click Planesnomad.bat
+#   test-build.properties            what installed launchers read to update themselves
+#
+# Safety choices:
+# - No third-party actions: the code is fetched with plain git and built by our own script, so
+#   nothing outside this repository runs with the token that can publish releases.
+# - The token may only write releases (contents: write), and only in this job.
+# - Libraries are checked against SHA-256 hashes in build/dependencies.txt.
+# - If the RELEASE_SIGNING_KEY secret exists, the build description is signed (Ed25519); launchers
+#   with the matching public key refuse anything unsigned. Without the secret builds are unsigned
+#   (fine while only testers use them).
+# - Only the 10 newest test builds are kept.
+name: Test build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - name: Get the code (this commit)
+        env:
+          TOKEN: ${{ github.token }}
+        run: |
+          git init -q .
+          AUTH="$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git -c http.extraheader="AUTHORIZATION: basic $AUTH" fetch -q --depth 1 \
+            "https://github.com/${GITHUB_REPOSITORY}.git" "${GITHUB_SHA}"
+          git checkout -q FETCH_HEAD
+          git log -1 --oneline
+
+      - name: Build and test
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+          RUN_TESTS: "1"
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          java -version
+          scripts/build-test-release.sh "test-build-${GITHUB_RUN_NUMBER}"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="test-build-${GITHUB_RUN_NUMBER}"
+          SUM="$(grep '^sha256=' dist/test-build.properties | cut -d= -f2)"
+          SIGNED="unsigned"
+          if grep -q '^signature=' dist/test-build.properties; then SIGNED="signed"; fi
+          {
+            echo "Automatic test build from ${GITHUB_SHA::8} (${SIGNED})."
+            echo
+            echo "**First time:** download \`Planesnomad-${V}.zip\`, unzip it anywhere, double-click \`Planesnomad.bat\` (needs Java 17+, https://adoptium.net)."
+            echo "**Already installed:** just start Planesnomad; it offers this update itself."
+            echo
+            echo "SHA-256 of the zip: \`${SUM}\`"
+          } > notes.md
+          gh release create "$V" "dist/Planesnomad-${V}.zip" dist/test-build.properties \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Test build ${GITHUB_RUN_NUMBER}" --notes-file notes.md --latest
+
+      - name: Keep only the 10 newest test builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 200 --json tagName --jq '.[].tagName' \
+            | grep -E '^test-build-[0-9]+$' | sort -t- -k3 -n -r | tail -n +11 \
+            | while read -r tag; do
+                gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+              done
