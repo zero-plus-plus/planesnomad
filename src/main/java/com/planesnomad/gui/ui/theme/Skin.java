@@ -41,7 +41,7 @@ public final class Skin {
         "table.you", "table.enemy", "hand", "panel", "column", "topbar", "popup", "stack",
         "badge.life", "badge.count", "badge.selected", "badge.target", "tag",
         "button", "button.hover", "button.pressed", "button.disabled", "relic.slot", "relic.frame", "consumable.frame", "consumable.empty", "inspect", "prompt", "phases", "choice",
-        "reward.backdrop", "reward", "reward.item", "reward.item.hover", "reward.item.claimed");
+        "reward.backdrop", "reward", "reward.item", "reward.item.hover", "reward.item.claimed", "bubble");
 
     /**
      * Built-in look per element, from the theme's colors (so changing e.g. color.panel changes
@@ -67,6 +67,7 @@ public final class Skin {
             case "button.disabled" -> new Base(Theme.blend(Theme.PANEL, Color.WHITE, 0.04), Theme.PANEL_EDGE, 1, 2);
             case "relic.slot" -> new Base(new Color(0x5B6574), null, 0, -1);
             case "relic.frame", "consumable.frame", "consumable.empty" -> new Base(new Color(0, 0, 0, 0), null, 0, 0);
+            case "bubble" -> new Base(new Color(0xF3EEDF), new Color(0x2A2A2A), 1.5, 12);
             case "reward.backdrop" -> new Base(new Color(0, 0, 0, 165), null, 0, 0);
             case "reward" -> new Base(new Color(18, 21, 27, 244), Theme.ACCENT, 2, 12);
             case "reward.item" -> new Base(Theme.blend(Theme.PANEL, Color.WHITE, 0.06), Theme.PANEL_EDGE, 1, 8);

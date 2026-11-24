@@ -7,8 +7,10 @@ import java.util.List;
  * Cards are named; their art crops are used for the portrait and playmat.
  *
  * @param subtitle      short line under the name (e.g. the enemy's theme)
- * @param portraitCard  card whose art is the player's portrait; null = placeholder
- * @param playmatCard   card whose art is the player's half of the table; null = fallback picture
+ * @param portraitCard  card whose art is the player's portrait, or {@code file:<path>} for a picture
+ *                      file (path from the game folder); null = placeholder
+ * @param playmatCard   card whose art is the player's half of the table, or {@code file:<path>};
+ *                      null = fallback picture
  * @param featuredCards cards shown in the enemy's effects bar ("guaranteed" cards), may be empty
  * @param featuredNotes per featured card (by name), a short note such as "Turn 2" (when it is
  *                      guaranteed); shown as a badge on the thumbnail and in the hover pop-up
@@ -23,6 +25,11 @@ public record PlayerLook(String subtitle, String portraitCard, String playmatCar
 
     public PlayerLook(String subtitle, String portraitCard, String playmatCard, List<String> featuredCards) {
         this(subtitle, portraitCard, playmatCard, featuredCards, java.util.Map.of());
+    }
+
+    /** The picture file of a "file:<path>" value, or null for a card name. */
+    public static String file(String value) {
+        return value != null && value.startsWith("file:") ? value.substring(5) : null;
     }
 
     public static PlayerLook plain(String subtitle) {

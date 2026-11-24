@@ -21,10 +21,20 @@ public final class HumanLobbyPlayer extends LobbyPlayerAi {
         this.stops = stops;
     }
 
+    private com.planesnomad.match.StartRules startRules;
+
+    /** The match's start rules (who goes first, preset hand). */
+    public HumanLobbyPlayer withStartRules(com.planesnomad.match.StartRules rules) {
+        startRules = rules;
+        return this;
+    }
+
     @Override
     public Player createIngamePlayer(Game game, int id) {
         Player p = new Player(getName(), game, id);
-        p.setFirstController(new HumanController(game, p, this, bridge, stops));
+        HumanController c = new HumanController(game, p, this, bridge, stops);
+        c.setStartRules(startRules);
+        p.setFirstController(c);
         return p;
     }
 }

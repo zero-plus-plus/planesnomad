@@ -30,7 +30,8 @@ import java.awt.Dimension;
  * "unlimited" / "mixed" play decks built from printings that match the test pictures
  * (Unlimited only, or Torment + Shadowmoor + Future Sight + Khans of Tarkir).
  * "play" (or "play-unlimited", "play-mixed"): you play the bottom deck yourself against the AI.
- * "encounter": you fight the Merfolk test encounter (guaranteed turn-2 Lord; reward screen if you win).
+ * "encounter [id]": you fight an encounter from data/encounters (default lorwyn/easy/merfolk-tidecaller)
+ * with the red starter deck: its preset hands, bonus permanents, barks; reward screen if you win.
  * "boards" shows the stress-test boards instead of a match (e.g. Krenko with 200 goblins),
  * frozen, to try piles and the right-click menu; the "Test boards" menu switches between them.
  */
@@ -95,6 +96,9 @@ public final class MatchViewerApp {
         CardDb db = ForgeEngine.initialize();
         com.planesnomad.gui.ui.Theme.apply(com.planesnomad.gui.ui.theme.ThemePack.fromSystemProperty());
         String which = args.length > 0 ? args[0].toLowerCase() : "";
+        if (args.length > 1) {
+            startEncounterId = args[1];
+        }
         SwingUtilities.invokeLater(() -> {
             MatchViewerApp app = new MatchViewerApp(db);
             app.testDecks = which;
@@ -336,20 +340,46 @@ public final class MatchViewerApp {
     private com.planesnomad.match.MatchSetup setup;
     private com.planesnomad.match.DeckLibrary decks;
 
-    /** The encounter being fought (guaranteed draws, rewards), or null for a plain test match. */
+    /** The encounter being fought (barks, rewards), or null for a plain test match. */
     private com.planesnomad.encounter.Encounter encounter;
+    /** Encounter files (data/encounters), read once and again from the Dev menu. */
+    private com.planesnomad.encounter.EncounterLibrary encounters;
+    /** "encounter <id>" on the command line. */
+    private static String startEncounterId = com.planesnomad.match.Presets.FIRST_ENCOUNTER;
+    /** Decides when the enemy speaks. */
+    private BarkWatcher barks;
+
+    /** Reads the encounter files; problems in them are printed and shown once. */
+    private com.planesnomad.encounter.EncounterLibrary encounters() {
+        if (encounters == null) {
+            encounters = com.planesnomad.encounter.EncounterLibrary.load(db);
+            if (!encounters.problems().isEmpty()) {
+                System.out.println("Problems in encounter files:\n- " + String.join("\n- ", encounters.problems()));
+                javax.swing.JOptionPane.showMessageDialog(frame,
+                    "Problems in encounter files (data/encounters):\n- " + String.join("\n- ", encounters.problems()),
+                    "Encounter files", javax.swing.JOptionPane.WARNING_MESSAGE);
+            }
+        }
+        return encounters;
+    }
     /** The reward screen was shown for the current match (once per match). */
     private boolean rewardsShown;
 
-    /** Starts an encounter with you (a person) on the bottom, playing the standard test deck and relics. */
+    /** Starts an encounter with you (a person) on the bottom, playing the red starter deck. */
     private void startEncounter(com.planesnomad.encounter.Encounter e) {
         encounter = e;
-        setup = e.setup(com.planesnomad.match.Presets.testMatch("", true).you());
+        setup = e.setup(com.planesnomad.match.Presets.encounterPlayer());
         startMatch();
     }
 
     /** After a finished match: the reward screen, if this was an encounter and you won. */
     private void afterSnapshot(com.planesnomad.gui.model.MatchSnapshot s) {
+        if (barks != null && !s.finished()) {
+            String line = barks.check(s);
+            if (line != null) {
+                view.showBark(line);
+            }
+        }
         if (!s.finished() || encounter == null || rewardsShown) {
             return;
         }
@@ -377,8 +407,13 @@ public final class MatchViewerApp {
 
     private com.planesnomad.match.MatchSetup initialSetup() {
         if (testDecks.equals("encounter")) {
-            encounter = com.planesnomad.encounter.Encounters.MERFOLK;
-            return encounter.setup(com.planesnomad.match.Presets.testMatch("", true).you());
+            encounter = encounters().get(startEncounterId);
+            if (encounter != null) {
+                return encounter.setup(com.planesnomad.match.Presets.encounterPlayer());
+            }
+            javax.swing.JOptionPane.showMessageDialog(frame, "No usable encounter file: " + startEncounterId
+                + "\n(data/encounters/" + startEncounterId + ".json)", "Encounter", javax.swing.JOptionPane.ERROR_MESSAGE);
+            return com.planesnomad.match.Presets.testMatch("", true);
         }
         // "play", "play-unlimited", "play-mixed": you play the bottom side; otherwise AI vs AI.
         boolean person = testDecks.startsWith("play");
@@ -401,9 +436,10 @@ public final class MatchViewerApp {
         com.planesnomad.gui.engine.HumanBridge bridge = person ? new com.planesnomad.gui.engine.HumanBridge() : null;
         MatchRunner[] self = new MatchRunner[1];
         Match match;
+        com.planesnomad.match.StartRules rules = new com.planesnomad.match.StartRules(setup);
         try {
             match = com.planesnomad.match.MatchFactory.create(setup, db, decks, bridge,
-                (yours, phase) -> self[0] != null && self[0].isStop(yours, phase));
+                (yours, phase) -> self[0] != null && self[0].isStop(yours, phase), rules);
         } catch (IllegalArgumentException e) {
             javax.swing.JOptionPane.showMessageDialog(frame, e.getMessage(), "Can't start the match",
                 javax.swing.JOptionPane.ERROR_MESSAGE);
@@ -411,7 +447,9 @@ public final class MatchViewerApp {
         }
         view.setHumanBridge(bridge);
         view.hideRewards();
+        view.showBark(null);
         rewardsShown = false;
+        barks = encounter == null ? null : new BarkWatcher(encounter.barks());
         frame.setTitle("Planesnomad - " + setup.you().name() + " vs " + setup.enemy().name()
             + (person ? "" : " (AI vs AI)"));
         self[0] = new MatchRunner(match, setup.you().name(), setup.enemy().name(), setup.you().look(), setup.enemy().look(),
@@ -422,11 +460,8 @@ public final class MatchViewerApp {
                 }
             }));
         runner = self[0];
-        if (encounter != null) {
-            var fight = encounter;
-            String enemyName = setup.enemy().name();
-            runner.setBeforeStart(game -> com.planesnomad.encounter.GuaranteedDraws.install(game, enemyName, fight.guarantees()));
-        }
+        // Who goes first, preset hands, bonus permanents, guaranteed draws.
+        runner.setBeforeStart(rules::install);
         if (bridge != null) {
             runner.setHumanBridge(bridge);
         }
@@ -443,6 +478,29 @@ public final class MatchViewerApp {
             runner.setStop(key.startsWith("you:"), forge.game.phase.PhaseType.valueOf(key.substring(key.indexOf(':') + 1)), true);
         }
         runner.start();
+    }
+
+    /** One item per encounter file, plus "Reload encounter files" (after editing them). */
+    private void fillEncounterMenu(JMenu fights) {
+        fights.removeAll();
+        for (var e : encounters().all()) {
+            JMenuItem it = new JMenuItem(e.name() + "  (" + e.plane() + ", " + e.tier().name().toLowerCase() + ")");
+            it.addActionListener(a -> startEncounter(e));
+            fights.add(it);
+        }
+        if (encounters().all().isEmpty()) {
+            JMenuItem none = new JMenuItem("No encounter files found");
+            none.setEnabled(false);
+            fights.add(none);
+        }
+        fights.addSeparator();
+        JMenuItem reload = new JMenuItem("Reload encounter files");
+        reload.addActionListener(a -> {
+            encounters = null;
+            decks = null;   // the enemies' decks come from the files too
+            fillEncounterMenu(fights);
+        });
+        fights.add(reload);
     }
 
     /** Developer controls (testing only; in the game these come from the run and the encounter). */
@@ -470,13 +528,16 @@ public final class MatchViewerApp {
         restart.addActionListener(e -> startMatch());
         menu.add(restart);
         menu.addSeparator();
-        for (var e : com.planesnomad.encounter.Encounters.all()) {
-            JMenuItem it = new JMenuItem("Encounter: " + e.name() + " (you vs AI)");
-            it.addActionListener(a -> startEncounter(e));
-            menu.add(it);
-        }
+        JMenu fights = new JMenu("Encounters (data/encounters)");
+        fillEncounterMenu(fights);
+        menu.add(fights);
         JMenuItem rewards = new JMenuItem("Show reward screen (layout test, no need to win)");
-        rewards.addActionListener(a -> showRewards(encounter != null ? encounter : com.planesnomad.encounter.Encounters.MERFOLK));
+        rewards.addActionListener(a -> {
+            var e = encounter != null ? encounter : encounters().get(com.planesnomad.match.Presets.FIRST_ENCOUNTER);
+            if (e != null) {
+                showRewards(e);
+            }
+        });
         menu.add(rewards);
         menu.addSeparator();
         for (String[] p : new String[][] {{"Test match: you vs AI", "play"}, {"Test match: AI vs AI", ""},

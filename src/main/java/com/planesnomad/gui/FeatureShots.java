@@ -1,7 +1,7 @@
 package com.planesnomad.gui;
 
 import com.planesnomad.ForgeEngine;
-import com.planesnomad.encounter.Encounters;
+import com.planesnomad.encounter.EncounterLibrary;
 import com.planesnomad.gui.engine.SnapshotBuilder;
 import com.planesnomad.gui.images.CardImages;
 import com.planesnomad.gui.images.ImageSetup;
@@ -72,23 +72,26 @@ public final class FeatureShots {
             Map.of(b1.id(), List.of(a1.id()), b2.id(), List.of(a1.id()), b3.id(), List.of(a3.id())));
         render(out, "blocks", blocks, images, v -> { });
 
+        // 2b. A bark: the enemy's speech bubble by its portrait (its background is a picture file).
+        render(out, "bark", blocks, images, v -> v.showBark("The tide... the tide is turning against me!"));
+
         // 3. Reward screen: the list, then the card choice.
-        var rewards = RewardOffers.roll(Encounters.MERFOLK.rewards(), new Random(3));
+        var rewards = RewardOffers.roll(EncounterLibrary.load(forge.StaticData.instance().getCommonCards()).get(com.planesnomad.match.Presets.FIRST_ENCOUNTER).rewards(), new Random(3));
         List<CardSnapshot> offered = new ArrayList<>();
         rewards.forEach(r -> offered.addAll(r.cards));
         images.preloadWithDownloads(offered);
         MatchSnapshot end = snapshot(List.of(a1), List.of(), List.of(), Map.of());
         render(out, "rewards", end, images, v -> v.showRewards("Victory!", "Merfolk of the Tide defeated",
-            RewardOffers.roll(Encounters.MERFOLK.rewards(), new Random(3)), o -> { }));
+            RewardOffers.roll(EncounterLibrary.load(forge.StaticData.instance().getCommonCards()).get(com.planesnomad.match.Presets.FIRST_ENCOUNTER).rewards(), new Random(3)), o -> { }));
         render(out, "rewards-cards", end, images, v -> {
             v.showRewards("Victory!", "Merfolk of the Tide defeated",
-                RewardOffers.roll(Encounters.MERFOLK.rewards(), new Random(3)), o -> { });
+                RewardOffers.roll(EncounterLibrary.load(forge.StaticData.instance().getCommonCards()).get(com.planesnomad.match.Presets.FIRST_ENCOUNTER).rewards(), new Random(3)), o -> { });
             v.rewardScreen().clickRow(0);   // took the gold
             v.rewardScreen().openCardChoice();
         });
         render(out, "rewards-taken", end, images, v -> {
             v.showRewards("Victory!", "Merfolk of the Tide defeated",
-                RewardOffers.roll(Encounters.MERFOLK.rewards(), new Random(3)), o -> { });
+                RewardOffers.roll(EncounterLibrary.load(forge.StaticData.instance().getCommonCards()).get(com.planesnomad.match.Presets.FIRST_ENCOUNTER).rewards(), new Random(3)), o -> { });
             v.rewardScreen().clickRow(0);
             v.rewardScreen().openCardChoice();
             v.rewardScreen().pickCard(1);
@@ -126,7 +129,8 @@ public final class FeatureShots {
         PlayerSnapshot foe = new PlayerSnapshot("Merfolk Tidecaller", "Merfolk lords and counterspells", 14, 20, 40,
             List.of(CardSnapshot.hidden(1), CardSnapshot.hidden(2), CardSnapshot.hidden(3)), eb, List.of(), List.of(), List.of(),
             false, false, SnapshotBuilder.named("Lord of Atlantis"), SnapshotBuilder.named("Island"),
-            List.of(SnapshotBuilder.named("Lord of Atlantis")), Map.of("Lord of Atlantis", "Turn 2"));
+            List.of(SnapshotBuilder.named("Lord of Atlantis")), Map.of("Lord of Atlantis", "Turn 2"),
+            null, "data/playmats/fallback-you.jpg");
         return new MatchSnapshot(4, "You", "Declare Blockers", you, foe, stack, List.of(), null, List.of(), blocks);
     }
 

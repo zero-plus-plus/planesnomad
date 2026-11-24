@@ -1,4 +1,4 @@
-package com.planesnomad.encounter;
+package com.planesnomad.match;
 
 import com.google.common.eventbus.Subscribe;
 import com.planesnomad.gui.engine.SnapshotBuilder;

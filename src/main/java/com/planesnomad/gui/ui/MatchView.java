@@ -84,6 +84,7 @@ public final class MatchView extends JPanel {
             targetArrows.setBounds(0, 0, getWidth(), getHeight());
             rewardScreen.setBounds(0, 0, getWidth(), getHeight());
             rewardScreen.doLayout();
+            placeBubble();
             if (choicePanel.isVisible()) {
                 java.awt.Dimension c = choicePanel.getPreferredSize();
                 choicePanel.setBounds((getWidth() - c.width) / 2, Math.max(0, (getHeight() - c.height) / 2 - Theme.px(30)),
@@ -112,6 +113,8 @@ public final class MatchView extends JPanel {
             enemyPanel.portraitComponent().repaint();
             youPanel.portraitComponent().repaint();
         });
+    /** What the enemy says (barks), by its portrait. */
+    private final SpeechBubble bubble = new SpeechBubble();
     /** After a won fight: the rewards to claim (covers the board). */
     private final RewardScreen rewardScreen = new RewardScreen(preview);
     private boolean rememberStackPosition;
@@ -185,6 +188,7 @@ public final class MatchView extends JPanel {
         boardLayer.add(stackPopup, JLayeredPane.PALETTE_LAYER);
         boardLayer.add(promptBar, JLayeredPane.MODAL_LAYER);
         boardLayer.add(choicePanel, JLayeredPane.MODAL_LAYER);
+        boardLayer.add(bubble, Integer.valueOf(JLayeredPane.PALETTE_LAYER + 1));
         boardLayer.add(rewardScreen, JLayeredPane.DRAG_LAYER);
         for (CardRow row : board.allRows()) {
             row.setEmptyMenu(this::boardMenu);
@@ -671,6 +675,33 @@ public final class MatchView extends JPanel {
 
     public void setRunLives(int lives) {
         runLives = lives;
+    }
+
+    /** The enemy says this line in a speech bubble by its portrait (null hides it). */
+    public void showBark(String line) {
+        bubble.say(line);
+        placeBubble();
+        boardLayer.repaint();
+    }
+
+    public SpeechBubble bubble() {
+        return bubble;
+    }
+
+    /** At the left edge of the board, level with the enemy's portrait (its tail points at it). */
+    private void placeBubble() {
+        if (!bubble.isVisible()) {
+            return;
+        }
+        java.awt.Dimension d = bubble.getPreferredSize();
+        javax.swing.JComponent face = enemyPanel.portraitComponent();
+        int y = Theme.px(10);
+        if (face.getHeight() > 0) {
+            java.awt.Point p = SwingUtilities.convertPoint(face, 0, face.getHeight() / 3, boardLayer);
+            y = p.y - Theme.px(18);
+        }
+        y = Math.max(Theme.px(4), Math.min(y, Math.max(Theme.px(4), boardLayer.getHeight() - d.height)));
+        bubble.setBounds(Theme.px(2), y, d.width, d.height);
     }
 
     /** Shows the reward screen over the board (after a won fight). */

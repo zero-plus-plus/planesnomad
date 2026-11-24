@@ -1,0 +1,64 @@
+// Easy Lorwyn enemy: a lowly Merfolk tidecaller and its school.
+// Format: data/encounters/README.md. Comments like this one are allowed.
+{
+  "version": 1,
+  "name": "Merfolk Tidecaller",
+  "subtitle": "Merfolk lords and counterspells",
+
+  // Temporary icon: a card's art. Background: a public-domain landscape (see data/playmats/CREDITS.txt).
+  "images": {
+    "icon": "card:Lord of Atlantis",
+    "background": "file:data/playmats/fallback-you.jpg"
+  },
+
+  "life": 20,
+  "firstPlayer": "player",
+
+  "deck": [
+    "4 Lord of Atlantis|4ED",
+    "4 Merfolk of the Pearl Trident|7ED",
+    "4 Merrow Reejerey|LRW",
+    "4 Silvergill Adept|LRW",
+    "4 Cursecatcher|SHM",
+    "4 Merfolk Trickster|DOM",
+    "2 Coralhelm Commander|ROE",
+    "2 Kopala, Warden of Waves|XLN",
+    "2 Streambed Aquitects|LRW",
+    "3 Merfolk Looter|7ED",
+    "1 Lullmage Mentor|ZEN",
+    "4 Counterspell|7ED",
+    "22 Island|LRW"
+  ],
+
+  // Always draws a Lord of Atlantis on its own 2nd turn.
+  "guarantees": [
+    { "card": "Lord of Atlantis", "drawOnTurn": 2 }
+  ],
+
+  "start": {
+    "enemy": {
+      // Preset opening hand, taken from the deck (no mulligan).
+      "hand": ["Island", "Island", "Cursecatcher", "Cursecatcher", "Merfolk of the Pearl Trident", "Counterspell"],
+      // Bonus permanents, not from the deck.
+      "battlefield": ["token:u_1_1_merfolk", "token:u_1_1_merfolk"]
+    },
+    "player": {}
+  },
+
+  "barks": [
+    { "when": "start", "text": "Dry feet won't carry you far in Lorwyn." },
+    { "when": "lifeBelowHalf", "text": "The tide... the tide is turning against me!" }
+  ],
+
+  // Test rewards: everything at once so the reward screen layout can be seen.
+  "rewards": {
+    "gold": 25,
+    "cardChoices": 3,
+    "cardPool": ["Lightning Bolt", "Fireball", "Goblin King", "Shivan Dragon", "Incinerate",
+                 "Raging Goblin", "Mogg Fanatic", "Shock", "Goblin Piledriver", "Lava Axe"],
+    "relics": ["Wayfarer's Compass"]
+  },
+
+  // Cards it drops (added to the card rewards later; not used yet).
+  "drops": ["Cursecatcher", "Silvergill Adept", "Merrow Reejerey", "Merfolk Looter", "Counterspell"]
+}

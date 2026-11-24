@@ -53,6 +53,25 @@ public final class HumanController extends PlayerControllerAi {
         this.stops = stops;
     }
 
+    /** The match's start rules (who goes first, preset hand); null = Forge's defaults. */
+    private com.planesnomad.match.StartRules startRules;
+
+    public void setStartRules(com.planesnomad.match.StartRules rules) {
+        startRules = rules;
+    }
+
+    @Override
+    public Player chooseStartingPlayer(boolean isFirstGame) {
+        Player fixed = startRules == null ? null : startRules.firstPlayer(getGame());
+        return fixed != null ? fixed : super.chooseStartingPlayer(isFirstGame);
+    }
+
+    @Override
+    public boolean mulliganKeepHand(Player firstPlayer, int cardsToReturn) {
+        Boolean keep = startRules == null ? null : startRules.keepHand(getPlayer());
+        return keep != null ? keep : super.mulliganKeepHand(firstPlayer, cardsToReturn);
+    }
+
     // ------------------------------------------------------------------ priority
 
     @Override

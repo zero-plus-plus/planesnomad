@@ -41,10 +41,21 @@ public final class Playmats {
      * @return true if a picture was drawn (false = caller draws the plain color)
      */
     public static boolean paint(Graphics2D g, CardSnapshot playmatCard, boolean you, int x, int y, int w, int h) {
+        return paint(g, playmatCard, null, you, x, y, w, h);
+    }
+
+    /**
+     * As above, with a picture file (path from the game folder, e.g. an encounter's background)
+     * used instead of the card's art when given.
+     */
+    public static boolean paint(Graphics2D g, CardSnapshot playmatCard, String file, boolean you, int x, int y, int w, int h) {
         if (w <= 0 || h <= 0) {
             return false;
         }
-        Image picture = playmatCard == null ? null : CardPainter.artImage(playmatCard, w, h);
+        Image picture = file == null ? null : picture(file, w, h);
+        if (picture == null && playmatCard != null) {
+            picture = CardPainter.artImage(playmatCard, w, h);
+        }
         if (picture == null) {
             picture = fallback(you ? FALLBACK_YOU : FALLBACK_ENEMY, w, h);
         }
@@ -61,6 +72,11 @@ public final class Playmats {
     }
 
     private static synchronized Image fallback(String file, int w, int h) {
+        return picture(FOLDER.resolve(file).toString(), w, h);
+    }
+
+    /** Any picture file, scaled and cropped to fill w x h (cached); null if it can't be read. */
+    public static synchronized BufferedImage picture(String file, int w, int h) {
         BufferedImage src = FALLBACKS.computeIfAbsent(file, Playmats::load);
         if (src == null) {
             return null;
@@ -78,7 +94,7 @@ public final class Playmats {
     }
 
     private static BufferedImage load(String file) {
-        Path path = FOLDER.resolve(file);
+        Path path = Path.of(file);
         if (!Files.isRegularFile(path)) {
             return null;
         }

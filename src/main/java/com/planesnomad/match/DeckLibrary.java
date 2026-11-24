@@ -48,6 +48,15 @@ public final class DeckLibrary {
         decks.put("Test: Unlimited blue-green", () -> testDeck("unlimited", 1));
         decks.put("Test: Mixed eras red-green", () -> testDeck("mixed", 0));
         decks.put("Test: Mixed eras blue-black", () -> testDeck("mixed", 1));
+        // Each encounter's deck, as "Enemy: <name>".
+        try {
+            var enc = com.planesnomad.encounter.EncounterLibrary.load(db);
+            for (var e : enc.all()) {
+                decks.put(e.enemy().deck(), e::deck);
+            }
+        } catch (RuntimeException e) {
+            problems.add("Encounters: " + e.getMessage());
+        }
         Path dir = folder();
         if (Files.isDirectory(dir)) {
             try (Stream<Path> s = Files.list(dir)) {
