@@ -38,6 +38,7 @@ public final class HumanPlayTest {
         int[] untilEventStartedOn = {-1};
         List<String> emptyCombatStops = Collections.synchronizedList(new ArrayList<>());
         boolean[] untilEventEnded = {false};
+        int[] untilEventEndedOn = {-1};
         bridge.setAutoTap(false);   // first: tap lands yourself
         bridge.setListener(req -> {
             if (req == null) {
@@ -58,6 +59,7 @@ public final class HumanPlayTest {
                 }
                 if (untilEventStartedOn[0] >= 0 && !untilEventEnded[0]) {
                     untilEventEnded[0] = true;   // asked again: "until something happens" stopped
+                    untilEventEndedOn[0] = turn;
                 }
                 // From turn 6: try "End turn"; from turn 9 (a later turn): "until something happens".
                 if (turn >= 6 && endTurnUsedOn[0] < 0) {
@@ -109,6 +111,12 @@ public final class HumanPlayTest {
         long sameTurn = endTurnUsedOn[0] < 0 ? -1 : priorityTurns.stream().filter(t -> t == endTurnUsedOn[0]).count();
         check("'Auto-pass all' passed the rest of that turn (asked once on turn " + endTurnUsedOn[0] + ")", sameTurn == 1);
         check("'Pass turn' passed, then asked again later", untilEventStartedOn[0] < 0 || untilEventEnded[0]);
+        check("Auto-passes last for the current turn only ('Pass turn' on turn " + untilEventStartedOn[0]
+                + ", asked again on turn " + untilEventEndedOn[0] + ")",
+            untilEventStartedOn[0] < 0 || untilEventEndedOn[0] < 0 || untilEventEndedOn[0] <= untilEventStartedOn[0] + 1);
+        long nextTurn = endTurnUsedOn[0] < 0 ? -1 : priorityTurns.stream().filter(t -> t == endTurnUsedOn[0] + 1).count();
+        check("After 'Auto-pass all', you get priority again on the next turn", endTurnUsedOn[0] < 0 || nextTurn > 0
+            || last.turn() <= endTurnUsedOn[0] + 1);
 
         System.out.println();
         if (failures == 0) {
