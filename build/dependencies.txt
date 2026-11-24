@@ -1,0 +1,25 @@
+# Third-party libraries the game needs at run time, from Maven Central
+# (https://repo1.maven.org/maven2/<path>). The release build downloads each one and refuses to
+# continue if its SHA-256 differs from the one here, so a changed or tampered file can't slip in.
+# Same list as classpath.txt (minus the Forge jars, which are in forge-engine/).
+# Format: <sha256> <path>
+2c3e41d1b380f2044d257947a3aa82dabf3ae4b978622745254aa18b6cf89ab0 com/google/guava/guava/33.3.1-android/guava-33.3.1-android.jar
+8a8f81cf9b359e3f6dfa691a1e776985c061ef2f223c9b2c80753e1b458e8064 com/google/guava/failureaccess/1.0.2/failureaccess-1.0.2.jar
+b372a037d4230aa57fbeffdef30fd6123f9c0c2db85d0aced00c91b974f33f99 com/google/guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/listenablefuture-9999.0-empty-to-avoid-conflict-with-guava.jar
+766ad2a0783f2687962c8ad74ceecc38a28b9f72a2d085ee438b7813e928d0c7 com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2.jar
+3fbc2e98f05854c3df16df9abaa955b91b15b3ecac33623208ed6424640ef0f6 org/checkerframework/checker-qual/3.43.0/checker-qual-3.43.0.jar
+f3fc8a3a0a4020706a373b00e7f57c2512dd26d1f83d28c7d38768f8682b231e com/google/errorprone/error_prone_annotations/2.28.0/error_prone_annotations-2.28.0.jar
+88241573467ddca44ffd4d74aa04c2bbfd11bf7c17e0c342c94c9de7a70a7c64 com/google/j2objc/j2objc-annotations/3.0.0/j2objc-annotations-3.0.0.jar
+4eeeae8d20c078abb64b015ec158add383ac581571cddc45c68f0c9ae0230720 org/apache/commons/commons-lang3/3.18.0/commons-lang3-3.18.0.jar
+de023257ff166044a56bd1aa9124e843cd05dac5806cc705a9311f3556d5a15f org/apache/commons/commons-text/1.12.0/commons-text-1.12.0.jar
+23fceecaf0fb11cd9e28068bc66c38651f85ebd11b4a9315e01df7c372be49da com/apptasticsoftware/rssreader/3.8.2/rssreader-3.8.2.jar
+51d3aa73a986bfc9853eea91cd71877b97891f01c85f69b42a27b5bb96295de2 org/tinylog/slf4j-tinylog/2.7.0/slf4j-tinylog-2.7.0.jar
+ce0e71d673acb9036bb55d0244b261cf033f8e4c1245f14f931dfb1937dd4c95 org/slf4j/slf4j-api/2.0.11/slf4j-api-2.0.11.jar
+eb5111e02a6b5324b5fd4e434cbe6b93119be05ad2dba3d21cf0045b3a97540c org/tinylog/tinylog-api/2.7.0/tinylog-api-2.7.0.jar
+37e532f706a01bb76a98454ccd71d1ffa2e83f2befe1c309e5c67e3c474bedba org/tinylog/tinylog-impl/2.7.0/tinylog-impl-2.7.0.jar
+31932885c77c693a23dd9d77486e5b0a8a73633099aae54f8c4f8250dea875c8 io/sentry/sentry/8.21.1/sentry-8.21.1.jar
+dfa596e9f0d0838f1b5e81dd0cd60e3a76c2c290ac25a0a029ffde58cf5e4c14 org/jgrapht/jgrapht-core/1.5.2/jgrapht-core-1.5.2.jar
+49a9898da3758659388f1333c53ccadb6fbd142a7d18aa7b1a33577090684279 org/jheaps/jheaps/0.14/jheaps-0.14.jar
+a1480f560f37355f6c0458c523bda46658da4cd3e23cc64e309fedcd7b0782ba org/apfloat/apfloat/1.10.1/apfloat-1.10.1.jar
+1e56d7b058d28b65abd256b8458e3885b674c1d588fa43cd7d1cbb9c7ef2b308 org/apache/commons/commons-math3/3.6.1/commons-math3-3.6.1.jar
+4241c14a7727c34feea6507ec801318a3d4a90f070e4525681079fb94ee4c593 com/google/code/gson/gson/2.10.1/gson-2.10.1.jar
