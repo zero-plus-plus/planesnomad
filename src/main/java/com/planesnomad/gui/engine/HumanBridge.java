@@ -62,7 +62,7 @@ public final class HumanBridge {
 
     private static final Object PASS = new Object();
 
-    /** Auto-pass: none, until something happens (an enemy spell or ability, or your next turn), or until the turn ends. */
+    /** Auto-pass, for the current turn only: none, until something happens (an enemy spell or ability), or until the turn ends. */
     public enum AutoPass { NONE, UNTIL_EVENT, END_OF_TURN }
 
     private volatile boolean autoTap = true;

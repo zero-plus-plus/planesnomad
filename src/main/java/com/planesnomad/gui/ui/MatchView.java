@@ -44,6 +44,24 @@ public final class MatchView extends JPanel {
     /** Default hotkey for the full stack list (WASD is kept free for future keyboard navigation). */
     public static final int STACK_DETAILS_KEY = KeyEvent.VK_TAB;
 
+    /**
+     * Default hotkeys for the two ways to pass the turn while you have priority: Enter = "Pass
+     * turn" (stops when the enemy does something), Shift+Enter = "Auto-pass all" (passes
+     * everything until the end of the turn). The hard one needs Shift so it's not hit by accident.
+     */
+    public static KeyStroke PASS_TURN_KEY = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0);
+    public static KeyStroke AUTO_PASS_ALL_KEY = KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, java.awt.event.InputEvent.SHIFT_DOWN_MASK);
+
+    /** "Enter", "Shift+Enter": how a hotkey is shown on buttons. */
+    public static String keyText(KeyStroke k) {
+        String mods = java.awt.event.InputEvent.getModifiersExText(k.getModifiers());
+        return (mods.isEmpty() ? "" : mods + "+") + KeyEvent.getKeyText(k.getKeyCode());
+    }
+
+    private static boolean matches(KeyEvent e, KeyStroke k) {
+        return e.getKeyCode() == k.getKeyCode() && e.getModifiersEx() == k.getModifiers();
+    }
+
     /** Left column width at the reference resolution. */
     private static final int LEFT_WIDTH = 220;
 
@@ -63,6 +81,9 @@ public final class MatchView extends JPanel {
         public void doLayout() {
             board.setBounds(0, 0, getWidth(), getHeight());
             board.doLayout();
+            targetArrows.setBounds(0, 0, getWidth(), getHeight());
+            rewardScreen.setBounds(0, 0, getWidth(), getHeight());
+            rewardScreen.doLayout();
             if (choicePanel.isVisible()) {
                 java.awt.Dimension c = choicePanel.getPreferredSize();
                 choicePanel.setBounds((getWidth() - c.width) / 2, Math.max(0, (getHeight() - c.height) / 2 - Theme.px(30)),
@@ -84,6 +105,15 @@ public final class MatchView extends JPanel {
             }
         }
     };
+    /** Arrows from stack cards to their targets (see-through, never takes the mouse). */
+    private final TargetArrows targetArrows = new TargetArrows(stackPopup, board.allRows(),
+        name -> this.last != null && name.equals(this.last.you().name()), board::midline,
+        () -> {
+            enemyPanel.portraitComponent().repaint();
+            youPanel.portraitComponent().repaint();
+        });
+    /** After a won fight: the rewards to claim (covers the board). */
+    private final RewardScreen rewardScreen = new RewardScreen(preview);
     private boolean rememberStackPosition;
     /** While a person plays: the question bar, and what clicks mean (null when watching AI vs AI). */
     private final PromptBar promptBar = new PromptBar();
@@ -151,9 +181,11 @@ public final class MatchView extends JPanel {
         add(topBar, BorderLayout.NORTH);
         add(left, BorderLayout.WEST);
         boardLayer.add(board, JLayeredPane.DEFAULT_LAYER);
+        boardLayer.add(targetArrows, Integer.valueOf(JLayeredPane.PALETTE_LAYER - 1));
         boardLayer.add(stackPopup, JLayeredPane.PALETTE_LAYER);
         boardLayer.add(promptBar, JLayeredPane.MODAL_LAYER);
         boardLayer.add(choicePanel, JLayeredPane.MODAL_LAYER);
+        boardLayer.add(rewardScreen, JLayeredPane.DRAG_LAYER);
         for (CardRow row : board.allRows()) {
             row.setEmptyMenu(this::boardMenu);
         }
@@ -239,14 +271,26 @@ public final class MatchView extends JPanel {
 
     /**
      * Tab (default key) shows or hides the full stack list; works even though Swing normally uses
-     * Tab for focus. While playing: Space = the prompt's main button (Pass, Attack, ...), Esc = cancel.
+     * Tab for focus. While playing: Space = the prompt's main button (Pass, Attack, ...), Esc = cancel,
+     * Enter = pass the turn, Shift+Enter = auto-pass all (see {@link #PASS_TURN_KEY}).
      */
     @Override
     public void addNotify() {
         super.addNotify();
         tabDispatcher = e -> {
-            if (e.getID() != KeyEvent.KEY_PRESSED || e.getModifiersEx() != 0
+            if (e.getID() != KeyEvent.KEY_PRESSED
                 || SwingUtilities.getWindowAncestor(this) != KeyboardFocusManager.getCurrentKeyboardFocusManager().getActiveWindow()) {
+                return false;
+            }
+            if (input != null && input.request() != null) {
+                if (matches(e, PASS_TURN_KEY)) {
+                    return input.passHotkey(com.planesnomad.gui.engine.HumanBridge.AutoPass.UNTIL_EVENT);
+                }
+                if (matches(e, AUTO_PASS_ALL_KEY)) {
+                    return input.passHotkey(com.planesnomad.gui.engine.HumanBridge.AutoPass.END_OF_TURN);
+                }
+            }
+            if (e.getModifiersEx() != 0) {
                 return false;
             }
             if (e.getKeyCode() == STACK_DETAILS_KEY) {
@@ -341,10 +385,12 @@ public final class MatchView extends JPanel {
             menu.add(tap);
             menu.addSeparator();
             javax.swing.JMenuItem untilEvent = new javax.swing.JMenuItem("Pass turn");
-            untilEvent.setToolTipText("Pass until the enemy casts or activates something, or your next turn starts");
+            untilEvent.setAccelerator(PASS_TURN_KEY);
+            untilEvent.setToolTipText("Pass until the enemy casts or activates something, or this turn ends");
             untilEvent.addActionListener(a -> input.autoPass(com.planesnomad.gui.engine.HumanBridge.AutoPass.UNTIL_EVENT));
             menu.add(untilEvent);
             javax.swing.JMenuItem endTurn = new javax.swing.JMenuItem("Auto-pass all");
+            endTurn.setAccelerator(AUTO_PASS_ALL_KEY);
             endTurn.setToolTipText("Pass everything until this turn ends (you still choose blockers)");
             endTurn.addActionListener(a -> input.autoPass(com.planesnomad.gui.engine.HumanBridge.AutoPass.END_OF_TURN));
             menu.add(endTurn);
@@ -381,7 +427,20 @@ public final class MatchView extends JPanel {
     }
 
     /** The question or the choices changed: prompt bar and highlights. */
+    /** Blocks shown on the board: the engine's, plus the ones you're choosing right now. */
+    private void applyBlocks() {
+        if (last == null) {
+            return;
+        }
+        java.util.Map<Integer, java.util.List<Integer>> all = new java.util.HashMap<>(last.blocks());
+        if (input != null) {
+            input.pendingBlocks().forEach((blocker, attacker) -> all.put(blocker, java.util.List.of(attacker)));
+        }
+        board.setBlocks(all);
+    }
+
     private void refreshInput() {
+        applyBlocks();
         choicePanel.setModel(input.choiceModel());
         promptBar.show(input.prompt(), input.actions());
         boardLayer.doLayout();
@@ -554,6 +613,16 @@ public final class MatchView extends JPanel {
         enemyPanel.update(s.enemy());
         youPanel.update(s.you());
         board.update(s);
+        applyBlocks();
+        // What the stack aims at: marked on the cards and portraits, with arrows from the stack.
+        java.util.Map<Integer, java.awt.Color> aimed = TargetMarks.cardTargets(s.stack());
+        for (CardRow row : board.allRows()) {
+            row.setTargetMarks(aimed);
+        }
+        java.util.Map<String, java.awt.Color> aimedPlayers = TargetMarks.playerTargets(s.stack());
+        enemyPanel.setTargetMark(aimedPlayers.get(s.enemy().name()));
+        youPanel.setTargetMark(aimedPlayers.get(s.you().name()));
+        targetArrows.setItems(s.stack());
         stackAndLog.update(s);
         historyBar.setEntries(s.history());
         updateStackPopup(s);
@@ -602,6 +671,21 @@ public final class MatchView extends JPanel {
 
     public void setRunLives(int lives) {
         runLives = lives;
+    }
+
+    /** Shows the reward screen over the board (after a won fight). */
+    public void showRewards(String title, String subtitle, java.util.List<RewardScreen.Reward> rewards,
+                            java.util.function.Consumer<RewardScreen.Outcome> onContinue) {
+        rewardScreen.setBounds(0, 0, boardLayer.getWidth(), boardLayer.getHeight());
+        rewardScreen.show(title, subtitle, rewards, onContinue);
+    }
+
+    public void hideRewards() {
+        rewardScreen.setVisible(false);
+    }
+
+    public RewardScreen rewardScreen() {
+        return rewardScreen;
     }
 
     public TopBar topBar() {

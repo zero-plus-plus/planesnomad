@@ -49,7 +49,7 @@ public final class PromptBar extends JComponent {
         }
         buttons.clear();
         for (PlayInput.Action a : actions) {
-            SkinButton b = new SkinButton(a.label() + (a.primary() ? "  (Space)" : ""));
+            SkinButton b = new SkinButton(a.label() + (a.keyHint() != null ? "  (" + a.keyHint() + ")" : ""));
             b.setFocusable(false);
             b.setFont(Theme.font(a.primary() ? Font.BOLD : Font.PLAIN, 12));
             b.addActionListener(e -> a.run().run());

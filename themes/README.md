@@ -80,6 +80,10 @@ popup.text        = #E8E4D8        # text color on it (where text is drawn on th
 | `badge.life` | life total on the portrait | `slice` or `stretch`; text via `badge.life.text` |
 | `badge.count` | counts on piles and history ("×200") | small `slice` pill |
 | `badge.selected` | selection on a pile ("37/200") | |
+| `reward.backdrop` | dims the board behind the reward screen (after a won fight) | plain fill with alpha |
+| `reward` | the reward screen's panel; `reward.text` = title color | `slice` frame |
+| `reward.item`, `reward.item.hover`, `reward.item.claimed` | one reward row (gold, card choice, relic) | `slice` |
+| `badge.target` | "TARGET" on a card or portrait that a stack item aims at, and the "→ Grizzly Bears" line on stack cards (arrows and crosshairs use `color.you` / `color.enemy`) | small `slice` pill |
 | `tag` | "Ability" / "Trigger" labels on the stack | |
 | `button`, `button.hover`, `button.pressed`, `button.disabled` | top bar buttons | four pictures of the same size, `slice` |
 | `relic.slot` | circle behind relic pictures | usually just `relic.slot.fill` |
@@ -96,6 +100,7 @@ All settings are listed with their built-in values in `themes/default/theme.prop
 - `font.body`, `font.heading` (names, titles, bold labels), `font.numbers` (life, counts), `font.scale`
 - `icon.history.<kind>`: a picture replacing a history symbol (square, transparent background). Kinds: cast, ability, trigger, land, attack, block, death, exile, bounce, tokens, damage, gameEnd
 - `icon.collapse`, `icon.expand`: the top bar's arrow buttons
+- `icon.reward.gold`, `icon.reward.cards`: pictures for the gold and card rewards (default: a drawn coin, the offered cards fanned); `icon.reward.relic` is drawn behind a relic reward's own icon
 - `icon.phase.<phase>`: the phase column's icons. Phases: upkeep, draw, main1, combatBegin, attackers, blockers, firstStrike, damage, combatEnd, main2, end, cleanup (firstStrike and cleanup only appear while they happen). Draw them in white or light colors: they are shown dim, gold (stop) or on the player's color (now)
 
 ## Checking a theme without the game window

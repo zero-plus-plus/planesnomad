@@ -97,7 +97,9 @@ public final class PlayerInfoPopup {
         }
         if (enemy) {
             for (CardSnapshot c : p.featured()) {
-                out.add(new Entry(c.name() + "  · Guaranteed card", ""));
+                String note = p.featuredNotes().get(c.name());
+                out.add(new Entry(c.name() + "  · Guaranteed card",
+                    note == null ? "" : "Drawn on its " + note.toLowerCase() + "."));
             }
         }
         return out;

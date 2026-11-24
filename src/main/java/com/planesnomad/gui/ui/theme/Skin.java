@@ -39,8 +39,9 @@ public final class Skin {
     /** Element keys a theme can style. */
     private static final java.util.List<String> ELEMENTS = java.util.List.of(
         "table.you", "table.enemy", "hand", "panel", "column", "topbar", "popup", "stack",
-        "badge.life", "badge.count", "badge.selected", "tag",
-        "button", "button.hover", "button.pressed", "button.disabled", "relic.slot", "relic.frame", "consumable.frame", "consumable.empty", "inspect", "prompt", "phases", "choice");
+        "badge.life", "badge.count", "badge.selected", "badge.target", "tag",
+        "button", "button.hover", "button.pressed", "button.disabled", "relic.slot", "relic.frame", "consumable.frame", "consumable.empty", "inspect", "prompt", "phases", "choice",
+        "reward.backdrop", "reward", "reward.item", "reward.item.hover", "reward.item.claimed");
 
     /**
      * Built-in look per element, from the theme's colors (so changing e.g. color.panel changes
@@ -58,6 +59,7 @@ public final class Skin {
             case "badge.life" -> new Base(new Color(10, 12, 16, 210), Theme.LIFE, 1.5, -1);
             case "badge.count" -> new Base(new Color(10, 12, 16, 225), Theme.TEXT_DIM, 1, -1);
             case "badge.selected" -> new Base(Theme.ACCENT, Theme.ACCENT.brighter(), 1, -1);
+            case "badge.target" -> new Base(new Color(10, 12, 16, 225), Theme.TEXT_DIM, 1, -1);
             case "tag" -> new Base(Theme.blend(Theme.PANEL, Color.WHITE, 0.12), null, 0, -1);
             case "button" -> new Base(Theme.blend(Theme.PANEL, Color.WHITE, 0.10), Theme.blend(Theme.PANEL_EDGE, Color.WHITE, 0.15), 1, 2);
             case "button.hover" -> new Base(Theme.blend(Theme.PANEL, Color.WHITE, 0.16), Theme.TEXT_DIM, 1, 2);
@@ -65,6 +67,11 @@ public final class Skin {
             case "button.disabled" -> new Base(Theme.blend(Theme.PANEL, Color.WHITE, 0.04), Theme.PANEL_EDGE, 1, 2);
             case "relic.slot" -> new Base(new Color(0x5B6574), null, 0, -1);
             case "relic.frame", "consumable.frame", "consumable.empty" -> new Base(new Color(0, 0, 0, 0), null, 0, 0);
+            case "reward.backdrop" -> new Base(new Color(0, 0, 0, 165), null, 0, 0);
+            case "reward" -> new Base(new Color(18, 21, 27, 244), Theme.ACCENT, 2, 12);
+            case "reward.item" -> new Base(Theme.blend(Theme.PANEL, Color.WHITE, 0.06), Theme.PANEL_EDGE, 1, 8);
+            case "reward.item.hover" -> new Base(Theme.blend(Theme.PANEL, Color.WHITE, 0.14), Theme.ACCENT, 1.5, 8);
+            case "reward.item.claimed" -> new Base(Theme.blend(Theme.PANEL, Color.BLACK, 0.25), Theme.PANEL_EDGE, 1, 8);
             case "choice" -> new Base(new Color(10, 12, 16, 225), Theme.ACCENT, 2, 10);
             case "phases" -> new Base(Theme.blend(Theme.PANEL, Color.BLACK, 0.15), Theme.PANEL_EDGE, 0, 0);
             case "prompt" -> new Base(Theme.PANEL, Theme.ACCENT, 2, 8);

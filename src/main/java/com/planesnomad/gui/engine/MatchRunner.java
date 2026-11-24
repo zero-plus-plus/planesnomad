@@ -98,6 +98,13 @@ public final class MatchRunner {
         human = bridge;
     }
 
+    /** Run on the new game before it starts (e.g. an encounter's guaranteed draws), on the engine thread. */
+    private java.util.function.Consumer<Game> beforeStart = g -> { };
+
+    public void setBeforeStart(java.util.function.Consumer<Game> hook) {
+        beforeStart = hook == null ? g -> { } : hook;
+    }
+
     public void start() {
         thread = new Thread(this::run, "planesnomad-match");
         thread.setDaemon(true);
@@ -111,6 +118,7 @@ public final class MatchRunner {
         if (human != null) {
             human.setBeforeAsk(this::publish);   // the screen shows the moment the question is about
         }
+        beforeStart.accept(game);
         game.subscribeToEvents(this);
         publish();
         match.startGame(game);

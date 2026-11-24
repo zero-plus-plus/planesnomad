@@ -30,6 +30,7 @@ import java.awt.Dimension;
  * "unlimited" / "mixed" play decks built from printings that match the test pictures
  * (Unlimited only, or Torment + Shadowmoor + Future Sight + Khans of Tarkir).
  * "play" (or "play-unlimited", "play-mixed"): you play the bottom deck yourself against the AI.
+ * "encounter": you fight the Merfolk test encounter (guaranteed turn-2 Lord; reward screen if you win).
  * "boards" shows the stress-test boards instead of a match (e.g. Krenko with 200 goblins),
  * frozen, to try piles and the right-click menu; the "Test boards" menu switches between them.
  */
@@ -335,7 +336,50 @@ public final class MatchViewerApp {
     private com.planesnomad.match.MatchSetup setup;
     private com.planesnomad.match.DeckLibrary decks;
 
+    /** The encounter being fought (guaranteed draws, rewards), or null for a plain test match. */
+    private com.planesnomad.encounter.Encounter encounter;
+    /** The reward screen was shown for the current match (once per match). */
+    private boolean rewardsShown;
+
+    /** Starts an encounter with you (a person) on the bottom, playing the standard test deck and relics. */
+    private void startEncounter(com.planesnomad.encounter.Encounter e) {
+        encounter = e;
+        setup = e.setup(com.planesnomad.match.Presets.testMatch("", true).you());
+        startMatch();
+    }
+
+    /** After a finished match: the reward screen, if this was an encounter and you won. */
+    private void afterSnapshot(com.planesnomad.gui.model.MatchSnapshot s) {
+        if (!s.finished() || encounter == null || rewardsShown) {
+            return;
+        }
+        String r = s.result();
+        boolean won = r.equals("You win") || r.equals(s.you().name() + " wins");
+        if (!won) {
+            return;
+        }
+        rewardsShown = true;
+        showRewards(encounter);
+    }
+
+    private void showRewards(com.planesnomad.encounter.Encounter e) {
+        view.showRewards("Victory!", e.name() + " defeated",
+            RewardOffers.roll(e.rewards(), new java.util.Random()),
+            outcome -> {
+                // No run layer yet: report what was taken. Later this goes into the run's state.
+                String took = outcome.gold() + " gold"
+                    + outcome.cards().stream().map(c -> ", " + c.name()).reduce("", String::concat)
+                    + outcome.relics().stream().map(x -> ", relic " + x.name()).reduce("", String::concat);
+                System.out.println("Rewards taken: " + took);
+                frame.setTitle("Planesnomad - rewards taken: " + took + "  (Dev menu: fight again)");
+            });
+    }
+
     private com.planesnomad.match.MatchSetup initialSetup() {
+        if (testDecks.equals("encounter")) {
+            encounter = com.planesnomad.encounter.Encounters.MERFOLK;
+            return encounter.setup(com.planesnomad.match.Presets.testMatch("", true).you());
+        }
         // "play", "play-unlimited", "play-mixed": you play the bottom side; otherwise AI vs AI.
         boolean person = testDecks.startsWith("play");
         String which = person ? testDecks.replaceFirst("^play-?", "") : testDecks;
@@ -366,15 +410,23 @@ public final class MatchViewerApp {
             return;
         }
         view.setHumanBridge(bridge);
+        view.hideRewards();
+        rewardsShown = false;
         frame.setTitle("Planesnomad - " + setup.you().name() + " vs " + setup.enemy().name()
             + (person ? "" : " (AI vs AI)"));
         self[0] = new MatchRunner(match, setup.you().name(), setup.enemy().name(), setup.you().look(), setup.enemy().look(),
             snapshot -> SwingUtilities.invokeLater(() -> {
                 if (runner == self[0]) {
                     view.update(snapshot);
+                    afterSnapshot(snapshot);
                 }
             }));
         runner = self[0];
+        if (encounter != null) {
+            var fight = encounter;
+            String enemyName = setup.enemy().name();
+            runner.setBeforeStart(game -> com.planesnomad.encounter.GuaranteedDraws.install(game, enemyName, fight.guarantees()));
+        }
         if (bridge != null) {
             runner.setHumanBridge(bridge);
         }
@@ -406,6 +458,9 @@ public final class MatchViewerApp {
                 com.planesnomad.match.MatchFactory.commandCardChoices(db), name -> db.getCard(name) != null);
             var chosen = dialog.ask();
             if (chosen != null) {
+                if (encounter != null && !chosen.enemy().equals(encounter.enemy())) {
+                    encounter = null;   // a different enemy: no longer the encounter (no guarantees, no rewards)
+                }
                 setup = chosen;
                 startMatch();
             }
@@ -415,12 +470,22 @@ public final class MatchViewerApp {
         restart.addActionListener(e -> startMatch());
         menu.add(restart);
         menu.addSeparator();
+        for (var e : com.planesnomad.encounter.Encounters.all()) {
+            JMenuItem it = new JMenuItem("Encounter: " + e.name() + " (you vs AI)");
+            it.addActionListener(a -> startEncounter(e));
+            menu.add(it);
+        }
+        JMenuItem rewards = new JMenuItem("Show reward screen (layout test, no need to win)");
+        rewards.addActionListener(a -> showRewards(encounter != null ? encounter : com.planesnomad.encounter.Encounters.MERFOLK));
+        menu.add(rewards);
+        menu.addSeparator();
         for (String[] p : new String[][] {{"Test match: you vs AI", "play"}, {"Test match: AI vs AI", ""},
                 {"Unlimited decks: you vs AI", "play-unlimited"}, {"Mixed eras: you vs AI", "play-mixed"}}) {
             JMenuItem it = new JMenuItem(p[0]);
             it.addActionListener(e -> {
                 String which = p[1].replaceFirst("^play-?", "");
                 setup = com.planesnomad.match.Presets.testMatch(which, p[1].startsWith("play"));
+                encounter = null;
                 startMatch();
             });
             menu.add(it);

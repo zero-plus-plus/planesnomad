@@ -97,6 +97,9 @@ public final class HumanController extends PlayerControllerAi {
             prompt = "Respond to " + who + (top == null ? "the stack" : top.getSourceCard().getName()) + ", or pass";
         }
         Object answer = bridge.ask(new Priority(prompt, list, !stackEmpty));
+        if (bridge.autoPass() != HumanBridge.AutoPass.NONE && autoPassTurn < 0) {
+            autoPassTurn = game.getPhaseHandler().getTurn();   // auto-pass chosen now: it lasts this turn only
+        }
         if (answer instanceof String key && key.startsWith("play:")) {
             int i = Integer.parseInt(key.substring(5));
             if (i >= 0 && i < options.size()) {
@@ -107,12 +110,11 @@ public final class HumanController extends PlayerControllerAi {
     }
 
     private int autoPassTurn = -1;
-    private int autoPassStartTurnOwner = -1;
 
     /**
-     * "Pass until end of turn": passes everything until the turn number changes.
-     * "Pass until something happens": passes until an enemy spell or ability is on the stack, or
-     * your next turn begins.
+     * Both auto-passes last for the current turn only (the turn they were chosen in):
+     * "Auto-pass all" passes everything until the turn ends; "Pass turn" also stops earlier, as soon
+     * as an enemy spell or ability is on the stack.
      */
     private boolean autoPassing(Game game, boolean myTurn, boolean stackEmpty) {
         HumanBridge.AutoPass mode = bridge.autoPass();
@@ -124,19 +126,11 @@ public final class HumanController extends PlayerControllerAi {
         if (autoPassTurn < 0) {
             autoPassTurn = turn;
         }
-        if (mode == HumanBridge.AutoPass.END_OF_TURN) {
-            if (turn == autoPassTurn) {
-                return true;
-            }
-            bridge.setAutoPass(HumanBridge.AutoPass.NONE);
-            autoPassTurn = -1;
-            return false;
-        }
-        // Until something happens.
+        boolean turnOver = turn != autoPassTurn;
         SpellAbilityStackInstance top = stackEmpty ? null : game.getStack().peek();
-        boolean enemyActs = top != null && top.getActivatingPlayer() != getPlayer();
-        boolean yourNewTurn = myTurn && turn != autoPassTurn;
-        if (enemyActs || yourNewTurn) {
+        boolean enemyActs = mode == HumanBridge.AutoPass.UNTIL_EVENT
+            && top != null && top.getActivatingPlayer() != getPlayer();
+        if (turnOver || enemyActs) {
             bridge.setAutoPass(HumanBridge.AutoPass.NONE);
             autoPassTurn = -1;
             return false;

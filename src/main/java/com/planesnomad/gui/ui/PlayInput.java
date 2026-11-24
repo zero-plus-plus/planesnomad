@@ -36,7 +36,11 @@ import java.util.Set;
 public final class PlayInput implements CardRow.Interaction {
 
     /** A button in the prompt bar. */
-    public record Action(String label, Runnable run, boolean primary) { }
+    public record Action(String label, Runnable run, boolean primary, String keyHint) {
+        public Action(String label, Runnable run, boolean primary) {
+            this(label, run, primary, primary ? "Space" : null);
+        }
+    }
 
     private final HumanBridge bridge;
     private final Runnable changed;
@@ -124,8 +128,10 @@ public final class PlayInput implements CardRow.Interaction {
             }, true));
         } else if (r instanceof Priority) {
             out.add(new Action("Pass", () -> answer(null), true));
-            out.add(new Action("Pass turn", () -> autoPass(HumanBridge.AutoPass.UNTIL_EVENT), false));
-            out.add(new Action("Auto-pass all", () -> autoPass(HumanBridge.AutoPass.END_OF_TURN), false));
+            out.add(new Action("Pass turn", () -> autoPass(HumanBridge.AutoPass.UNTIL_EVENT), false,
+                MatchView.keyText(MatchView.PASS_TURN_KEY)));
+            out.add(new Action("Auto-pass all", () -> autoPass(HumanBridge.AutoPass.END_OF_TURN), false,
+                MatchView.keyText(MatchView.AUTO_PASS_ALL_KEY)));
         } else if (r instanceof HumanBridge.ArrangeCards) {
             out.add(new Action("Done", () -> answer(new ArrayList<>(sentAway)), true));
         } else if (r instanceof HumanBridge.ManaPayment) {
@@ -140,10 +146,7 @@ public final class PlayInput implements CardRow.Interaction {
         } else if (r instanceof Attackers a) {
             out.add(new Action(chosenAttackers.isEmpty() ? "No attack" : "Attack (" + chosenAttackers.size() + ")",
                 () -> answer(new ArrayList<>(chosenAttackers)), true));
-            out.add(new Action("All", () -> {
-                chosenAttackers.addAll(a.candidates());
-                changed.run();
-            }, false));
+            out.add(new Action("Attack with all", () -> answer(new ArrayList<>(a.candidates())), false));
             if (!chosenAttackers.isEmpty()) {
                 out.add(new Action("Clear", () -> {
                     chosenAttackers.clear();
@@ -165,8 +168,8 @@ public final class PlayInput implements CardRow.Interaction {
     }
 
     /**
-     * Pass priority automatically: until something happens (an enemy spell or ability, or your
-     * next turn), or hard until the end of the turn. Answers the current priority question too.
+     * Pass priority automatically for the rest of this turn only: soft (stops early when an enemy
+     * spell or ability arrives) or hard (everything). Answers the current priority question too.
      */
     public void autoPass(HumanBridge.AutoPass mode) {
         Request r = request;
@@ -181,9 +184,26 @@ public final class PlayInput implements CardRow.Interaction {
         return bridge;
     }
 
+    /** While you choose blockers: blocker id -> attacker id so far (shown on the board). */
+    public Map<Integer, Integer> pendingBlocks() {
+        return request instanceof Blockers ? Map.copyOf(blocks) : Map.of();
+    }
+
     /** Space: the main button (pass, attack, block, done). */
     public void primary() {
         actions().stream().filter(Action::primary).findFirst().ifPresent(a -> a.run().run());
+    }
+
+    /**
+     * Enter (soft) / Shift+Enter (hard): pass the turn while you have priority. Does nothing
+     * otherwise, so a stray Enter during a target or block choice can't pass anything.
+     */
+    public boolean passHotkey(HumanBridge.AutoPass mode) {
+        if (!(request instanceof Priority)) {
+            return false;
+        }
+        autoPass(mode);
+        return true;
     }
 
     /** Esc: cancel a target choice, or drop a half-made block. */

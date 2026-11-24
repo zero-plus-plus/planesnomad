@@ -111,6 +111,7 @@ public final class StackPopup extends JComponent {
                 setCursor(java.awt.Cursor.getPredefinedCursor(onGrip(e.getPoint())
                     ? java.awt.Cursor.SE_RESIZE_CURSOR : java.awt.Cursor.MOVE_CURSOR));
                 StackItem hit = onGrip(e.getPoint()) ? null : itemAt(e.getPoint());
+                setHovered(hit);
                 if (hit != null && hit.source() != null) {
                     preview.hover(hit.source(), StackPopup.this, e.getPoint());
                 } else {
@@ -120,6 +121,7 @@ public final class StackPopup extends JComponent {
 
             @Override
             public void mouseExited(MouseEvent e) {
+                setHovered(null);
                 preview.exit();
             }
         };
@@ -131,6 +133,38 @@ public final class StackPopup extends JComponent {
                 setSizeScale(sizeScale * (e.getPreciseWheelRotation() < 0 ? 1.1 : 1 / 1.1));
             }
         });
+    }
+
+    /** The stack item under the mouse (its target arrows are drawn strongest), or null. */
+    private StackItem hoveredItem;
+    private Runnable onHoverChanged = () -> { };
+
+    private void setHovered(StackItem item) {
+        if (item != hoveredItem) {
+            hoveredItem = item;
+            onHoverChanged.run();
+        }
+    }
+
+    public StackItem hoveredItem() {
+        return hoveredItem;
+    }
+
+    public void onHoverChanged(Runnable r) {
+        onHoverChanged = r;
+    }
+
+    /**
+     * The visible part of a stack item's card in this pop-up (the whole card for the top item, its
+     * title strip for those behind), or null if it isn't drawn. In this component's coordinates.
+     */
+    public Rectangle itemBounds(StackItem item) {
+        for (int i = 0; i < hitItems.size(); i++) {
+            if (hitItems.get(i) == item) {
+                return new Rectangle(hitBoxes.get(i));
+            }
+        }
+        return null;
     }
 
     /** While a person plays: highlight for stack items (e.g. a spell you can counter) and their click. */
@@ -247,6 +281,9 @@ public final class StackPopup extends JComponent {
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         hitBoxes.clear();
         hitItems.clear();
+        if (hoveredItem != null && !items.contains(hoveredItem)) {
+            hoveredItem = null;
+        }
 
         int arc = Theme.px(10);
         com.planesnomad.gui.ui.theme.Skin.paint(g, "stack", 0, 0, getWidth(), getHeight());
@@ -300,6 +337,7 @@ public final class StackPopup extends JComponent {
                 if (item.resolving()) {
                     tag(g, "Resolving…", x + Theme.px(4), tagY, Theme.ACCENT, new Color(0x1A1A1A));
                 }
+                targetLine(g, item, x, y + (int) (cardH() * 0.50), cardW());
             } else if (item.kind() != StackItem.Kind.SPELL) {
                 tag(g, item.kind() == StackItem.Kind.TRIGGER ? "T" : "A",
                     x + cardW() - Theme.px(18), y + Theme.px(2), new Color(0x2B2F36), Theme.TEXT);
@@ -320,6 +358,44 @@ public final class StackPopup extends JComponent {
             g.drawLine(gx - d, gy, gx, gy - d);
         }
         g.dispose();
+    }
+
+    /**
+     * "→ Grizzly Bears" across the card: what this item is aimed at, in the color of its
+     * controller (theme element badge.target), so it's clear without reading the log.
+     */
+    private static void targetLine(Graphics2D g, StackItem item, int x, int y, int w) {
+        if (item.targets().isEmpty()) {
+            return;
+        }
+        StringBuilder sb = new StringBuilder("\u2192 ");
+        for (int i = 0; i < item.targets().size(); i++) {
+            var t = item.targets().get(i);
+            if (i > 0) {
+                sb.append(", ");
+            }
+            sb.append(t.kind() == com.planesnomad.gui.model.MatchSnapshot.Target.Kind.PLAYER
+                ? (t.yours() ? "you" : t.name())
+                : t.name() + (t.kind() == com.planesnomad.gui.model.MatchSnapshot.Target.Kind.CARD
+                    ? (t.yours() ? " (yours)" : "") : " (spell)"));
+        }
+        g.setFont(Theme.font(Font.BOLD, 10));
+        FontMetrics fm = g.getFontMetrics();
+        int pad = Theme.px(4);
+        String text = sb.toString();
+        int max = w - 2 * pad;
+        while (fm.stringWidth(text) + 2 * pad > max && text.length() > 4) {
+            text = text.substring(0, text.length() - 2) + "\u2026";
+            if (text.endsWith("\u2026\u2026")) {
+                text = text.substring(0, text.length() - 1);
+            }
+        }
+        int tw = Math.min(max, fm.stringWidth(text) + 2 * pad);
+        int th = fm.getHeight() + Theme.px(2);
+        int tx = x + (w - tw) / 2;
+        com.planesnomad.gui.ui.theme.Skin.paint(g, "badge.target", tx, y, tw, th);
+        g.setColor(com.planesnomad.gui.ui.theme.Skin.text("badge.target", Color.WHITE));
+        g.drawString(text, tx + pad, y + Theme.px(1) + fm.getAscent());
     }
 
     /** Draws a small label; returns its top y. */

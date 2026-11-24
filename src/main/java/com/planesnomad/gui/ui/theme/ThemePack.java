@@ -166,7 +166,8 @@ public final class ThemePack {
             return java.util.Set.of("upkeep", "draw", "main1", "combatBegin", "attackers", "blockers", "firstStrike",
                 "damage", "combatEnd", "main2", "end", "cleanup").contains(key.substring("icon.phase.".length()));
         }
-        if (key.equals("icon.collapse") || key.equals("icon.expand")) {
+        if (key.equals("icon.collapse") || key.equals("icon.expand")
+            || key.equals("icon.reward.gold") || key.equals("icon.reward.cards") || key.equals("icon.reward.relic")) {
             return true;
         }
         if (key.equals("popup.padding") || key.equals("popup.sideBorder") || key.equals("prompt.padding")
